@@ -36,6 +36,8 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
+      originMarkerRef.current = null;
+      destinationMarkerRef.current = null;
     };
   }, [containerRef]);
 
@@ -73,7 +75,25 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !route) {
+    if (!map) {
+      return;
+    }
+
+    if (!route) {
+      const clearRoute = () => {
+        if (map.getSource(ROUTE_SOURCE_ID)) {
+          if (map.getLayer(ROUTE_LAYER_ID)) {
+            map.removeLayer(ROUTE_LAYER_ID);
+          }
+          map.removeSource(ROUTE_SOURCE_ID);
+        }
+      };
+
+      if (map.isStyleLoaded()) {
+        clearRoute();
+      } else {
+        map.once('load', clearRoute);
+      }
       return;
     }
 
@@ -90,17 +110,25 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
       const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
       if (source) {
         source.setData(geojson);
-        return;
+      } else {
+        map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson });
+        map.addLayer({
+          id: ROUTE_LAYER_ID,
+          type: 'line',
+          source: ROUTE_SOURCE_ID,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#2563eb', 'line-width': 5 },
+        });
       }
 
-      map.addSource(ROUTE_SOURCE_ID, { type: 'geojson', data: geojson });
-      map.addLayer({
-        id: ROUTE_LAYER_ID,
-        type: 'line',
-        source: ROUTE_SOURCE_ID,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#2563eb', 'line-width': 5 },
-      });
+      if (route.geometry.length > 0) {
+        const [first, ...rest] = route.geometry;
+        const bounds = rest.reduce(
+          (acc, point) => acc.extend([point.lng, point.lat]),
+          new mapboxgl.LngLatBounds([first.lng, first.lat], [first.lng, first.lat]),
+        );
+        map.fitBounds(bounds, { padding: 48 });
+      }
     };
 
     if (map.isStyleLoaded()) {
