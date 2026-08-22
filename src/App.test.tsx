@@ -237,4 +237,70 @@ describe('App', () => {
     });
     expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('mostra banner de erro quando o cálculo de rota falha, e o retry rechama getDirections', async () => {
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
+    ]);
+    const getDirectionsSpy = vi
+      .spyOn(mapboxClient, 'getDirections')
+      .mockRejectedValue(new Error('Falha ao calcular rota: 500'));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await waitFor(() => {
+      expect(screen.getByText('Falha ao calcular rota: 500')).toBeInTheDocument();
+    });
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('Tentar novamente'));
+
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('mostra banner em tela cheia quando a geolocalização é negada, e o retry rechama watchPosition', async () => {
+    const watchPositionMock = vi.fn(
+      (_success: PositionCallback, error?: PositionErrorCallback | null) => {
+        error?.({
+          code: 1,
+          message: 'User denied Geolocation',
+        } as GeolocationPositionError);
+        return 1;
+      },
+    );
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: {
+        watchPosition: watchPositionMock,
+        clearWatch: vi.fn(),
+      },
+      configurable: true,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Não foi possível acessar sua localização. Permita o acesso e tente novamente.',
+        ),
+      ).toBeInTheDocument();
+    });
+    expect(watchPositionMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('Tentar novamente'));
+
+    expect(watchPositionMock).toHaveBeenCalledTimes(2);
+  });
 });
