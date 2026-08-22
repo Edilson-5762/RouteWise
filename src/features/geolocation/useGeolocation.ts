@@ -53,7 +53,6 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { ...state, retry: startWatching };
