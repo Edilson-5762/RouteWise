@@ -175,8 +175,8 @@ describe('App', () => {
       },
     ]);
 
-    let resolveDirections: ((route: Awaited<ReturnType<typeof mapboxClient.getDirections>>) => void) | null =
-      null;
+    let resolveDirections:
+      ((route: Awaited<ReturnType<typeof mapboxClient.getDirections>>) => void) | null = null;
     const directionsPromise = new Promise<Awaited<ReturnType<typeof mapboxClient.getDirections>>>(
       (resolve) => {
         resolveDirections = resolve;

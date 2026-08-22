@@ -68,19 +68,19 @@ src/
 
 ### Variáveis de Ambiente
 
-| Variável             | Obrigatória | Descrição                                              |
-| -------------------- | ----------- | -------------------------------------------------------- |
-| `VITE_MAPBOX_TOKEN`  | Sim         | Token público de acesso à API do Mapbox                  |
+| Variável            | Obrigatória | Descrição                               |
+| ------------------- | ----------- | --------------------------------------- |
+| `VITE_MAPBOX_TOKEN` | Sim         | Token público de acesso à API do Mapbox |
 
 ## Scripts Disponíveis
 
-| Comando           | Descrição                                    |
-| ------------------ | --------------------------------------------- |
-| `npm run dev`       | Inicia o servidor de desenvolvimento          |
-| `npm run build`     | Gera a build de produção                      |
-| `npm run test`      | Roda a suíte de testes                        |
-| `npm run lint`      | Roda o ESLint                                 |
-| `npm run format`    | Formata o código com Prettier                 |
+| Comando          | Descrição                            |
+| ---------------- | ------------------------------------ |
+| `npm run dev`    | Inicia o servidor de desenvolvimento |
+| `npm run build`  | Gera a build de produção             |
+| `npm run test`   | Roda a suíte de testes               |
+| `npm run lint`   | Roda o ESLint                        |
+| `npm run format` | Formata o código com Prettier        |
 
 ## Segurança
 

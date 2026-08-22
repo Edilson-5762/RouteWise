@@ -26,9 +26,7 @@ describe('useRoute', () => {
   });
 
   it('define uma mensagem de erro quando a requisição de rota falha', async () => {
-    vi.spyOn(mapboxClient, 'getDirections').mockRejectedValue(
-      new Error('Nenhuma rota encontrada'),
-    );
+    vi.spyOn(mapboxClient, 'getDirections').mockRejectedValue(new Error('Nenhuma rota encontrada'));
     const dispatch = vi.fn();
 
     const { result } = renderHook(() => useRoute(dispatch));

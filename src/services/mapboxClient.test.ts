@@ -23,7 +23,11 @@ describe('searchPlaces', () => {
     const results = await searchPlaces('Paulista');
 
     expect(results).toEqual([
-      { id: 'place.1', placeName: 'Av. Paulista, São Paulo', coordinates: { lng: -46.6333, lat: -23.5505 } },
+      {
+        id: 'place.1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lng: -46.6333, lat: -23.5505 },
+      },
     ]);
   });
 
@@ -91,8 +95,8 @@ describe('getDirections', () => {
       json: async () => ({ code: 'NoRoute', routes: [] }),
     });
 
-    await expect(
-      getDirections({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'driving'),
-    ).rejects.toThrow(MapboxRequestError);
+    await expect(getDirections({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'driving')).rejects.toThrow(
+      MapboxRequestError,
+    );
   });
 });
