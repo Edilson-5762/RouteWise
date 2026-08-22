@@ -66,7 +66,9 @@ src/
     distance.ts
     format.ts
     maneuverIcon.ts  # Ícones de manobras para instruções passo a passo
+  App.tsx        # Componente raiz que renderiza PlanningView ou NavigationView
   main.tsx       # Ponto de entrada do React
+  index.css      # Estilos globais
   vite-env.d.ts  # Definições de tipos do Vite
 ```
 
