@@ -3,6 +3,8 @@ import type { Coordinates } from '../../types';
 
 interface GeolocationState {
   position: Coordinates | null;
+  speedMetersPerSecond: number | null;
+  headingDegrees: number | null;
   error: string | null;
   isLoading: boolean;
 }
@@ -10,6 +12,8 @@ interface GeolocationState {
 export function useGeolocation(): GeolocationState & { retry: () => void } {
   const [state, setState] = useState<GeolocationState>({
     position: null,
+    speedMetersPerSecond: null,
+    headingDegrees: null,
     error: null,
     isLoading: true,
   });
@@ -19,6 +23,8 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     if (!navigator.geolocation) {
       setState({
         position: null,
+        speedMetersPerSecond: null,
+        headingDegrees: null,
         error: 'Seu navegador não suporta geolocalização.',
         isLoading: false,
       });
@@ -35,6 +41,8 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       (result) => {
         setState({
           position: { lat: result.coords.latitude, lng: result.coords.longitude },
+          speedMetersPerSecond: result.coords.speed ?? null,
+          headingDegrees: result.coords.heading ?? null,
           error: null,
           isLoading: false,
         });
@@ -42,6 +50,8 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       () => {
         setState({
           position: null,
+          speedMetersPerSecond: null,
+          headingDegrees: null,
           error: 'Não foi possível acessar sua localização. Permita o acesso e tente novamente.',
           isLoading: false,
         });
