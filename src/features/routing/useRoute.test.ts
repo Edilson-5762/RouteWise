@@ -38,4 +38,25 @@ describe('useRoute', () => {
     expect(result.current.error).toBe('Nenhuma rota encontrada');
     expect(dispatch).not.toHaveBeenCalled();
   });
+
+  it('recalculateRoute despacha ROUTE_RECALCULATED em vez de ROUTE_PLANNED', async () => {
+    const fakeRoute: Route = {
+      geometry: [{ lat: 0, lng: 0 }],
+      steps: [],
+      distanceMeters: 100,
+      durationSeconds: 10,
+    };
+    vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue(fakeRoute);
+    const dispatch = vi.fn();
+
+    const { result } = renderHook(() => useRoute(dispatch));
+
+    await act(async () => {
+      await result.current.recalculateRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, 'driving');
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'ROUTE_RECALCULATED' }),
+    );
+  });
 });

@@ -24,5 +24,21 @@ export function useRoute(dispatch: Dispatch<NavigationAction>) {
     [dispatch],
   );
 
-  return { planRoute, isLoading, error };
+  const recalculateRoute = useCallback(
+    async (origin: Coordinates, destination: Coordinates, profile: TravelProfile) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const route = await getDirections(origin, destination, profile);
+        dispatch({ type: 'ROUTE_RECALCULATED', route });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao recalcular a rota.');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [dispatch],
+  );
+
+  return { planRoute, recalculateRoute, isLoading, error };
 }
