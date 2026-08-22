@@ -37,8 +37,6 @@ src/
     NavigationStatusBar.tsx
     NavigationView.tsx
     PlanningView.tsx
-    RouteInstructions.tsx
-    RouteSummary.tsx
     SavedPlacesShortcuts.tsx
     SearchBar.tsx
     TravelModeToggle.tsx
