@@ -22,7 +22,7 @@
 
 ---
 
-## Tarefa 1: Bootstrap do Projeto
+## Task 1: Bootstrap do Projeto
 
 **Arquivos:**
 - Criar: `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `tailwind.config.js`, `postcss.config.js`, `index.html`, `src/main.tsx`, `src/App.tsx` (placeholder), `src/index.css`, `src/vite-env.d.ts`, `src/test/setup.ts`
@@ -334,7 +334,7 @@ git commit -m "chore: bootstrap do projeto com Vite, React, TypeScript e Tailwin
 
 ---
 
-## Tarefa 2: Tipos Compartilhados e Utilitário de Distância
+## Task 2: Tipos Compartilhados e Utilitário de Distância
 
 **Arquivos:**
 - Criar: `src/types/index.ts`
@@ -479,7 +479,7 @@ git commit -m "feat: adiciona tipos compartilhados e utilitario de distancia"
 
 ---
 
-## Tarefa 3: Utilitário de Formatação
+## Task 3: Utilitário de Formatação
 
 **Arquivos:**
 - Criar: `src/utils/format.ts`
@@ -558,7 +558,7 @@ git commit -m "feat: adiciona utilitario de formatacao de distancia e duracao"
 
 ---
 
-## Tarefa 4: Cliente Mapbox (Geocoding + Directions)
+## Task 4: Cliente Mapbox (Geocoding + Directions)
 
 **Arquivos:**
 - Criar: `src/services/mapboxClient.ts`
@@ -798,7 +798,7 @@ git commit -m "feat: adiciona cliente da API do Mapbox (geocoding e directions)"
 
 ---
 
-## Tarefa 5: Hook de Geolocalização
+## Task 5: Hook de Geolocalização
 
 **Arquivos:**
 - Criar: `src/features/geolocation/useGeolocation.ts`
@@ -948,7 +948,7 @@ git commit -m "feat: adiciona hook de geolocalizacao"
 
 ---
 
-## Tarefa 6: Hook de Busca com Autocomplete
+## Task 6: Hook de Busca com Autocomplete
 
 **Arquivos:**
 - Criar: `src/features/search/useGeocodingSearch.ts`
@@ -1075,7 +1075,7 @@ git commit -m "feat: adiciona hook de busca de destino com autocomplete"
 
 ---
 
-## Tarefa 7: Reducer de Navegação (Máquina de Estados)
+## Task 7: Reducer de Navegação (Máquina de Estados)
 
 **Arquivos:**
 - Criar: `src/features/routing/navigationReducer.ts`
@@ -1268,7 +1268,7 @@ git commit -m "feat: adiciona maquina de estados de navegacao"
 
 ---
 
-## Tarefa 8: Hook de Planejamento de Rota (useRoute)
+## Task 8: Hook de Planejamento de Rota (useRoute)
 
 **Arquivos:**
 - Criar: `src/features/routing/useRoute.ts`
@@ -1380,7 +1380,7 @@ git commit -m "feat: adiciona hook de planejamento de rota"
 
 ---
 
-## Tarefa 9: Hook e Componente de Mapa (Mapbox GL)
+## Task 9: Hook e Componente de Mapa (Mapbox GL)
 
 **Arquivos:**
 - Criar: `src/features/map/useMapboxMap.ts`
@@ -1615,7 +1615,7 @@ git commit -m "feat: adiciona hook e componente de mapa com Mapbox GL"
 
 ---
 
-## Tarefa 10: Componente de Busca (SearchBar)
+## Task 10: Componente de Busca (SearchBar)
 
 **Arquivos:**
 - Criar: `src/components/SearchBar.tsx`
@@ -1734,7 +1734,7 @@ git commit -m "feat: adiciona componente de busca de destino"
 
 ---
 
-## Tarefa 11: Componente de Instruções de Rota
+## Task 11: Componente de Instruções de Rota
 
 **Arquivos:**
 - Criar: `src/components/RouteInstructions.tsx`
@@ -1837,7 +1837,7 @@ git commit -m "feat: adiciona componente de instrucoes da rota"
 
 ---
 
-## Tarefa 12: Componentes de Resumo e Erro
+## Task 12: Componentes de Resumo e Erro
 
 **Arquivos:**
 - Criar: `src/components/RouteSummary.tsx`
@@ -1951,7 +1951,7 @@ git commit -m "feat: adiciona componentes de resumo de rota e aviso de erro"
 
 ---
 
-## Tarefa 13: Integração Final (App.tsx)
+## Task 13: Integração Final (App.tsx)
 
 **Arquivos:**
 - Modificar: `src/App.tsx` (substitui o placeholder da Tarefa 1)
@@ -2158,7 +2158,7 @@ git commit -m "feat: integra busca, mapa, rota e navegacao no App"
 
 ---
 
-## Tarefa 14: Segurança — Variáveis de Ambiente e Headers
+## Task 14: Segurança — Variáveis de Ambiente e Headers
 
 **Arquivos:**
 - Criar: `vercel.json`
@@ -2215,7 +2215,7 @@ git commit -m "chore: adiciona headers de seguranca para o deploy na Vercel"
 
 ---
 
-## Tarefa 15: CI/CD (GitHub Actions)
+## Task 15: CI/CD (GitHub Actions)
 
 **Arquivos:**
 - Criar: `.github/workflows/ci.yml`
@@ -2263,7 +2263,7 @@ Esperado: acessar a aba "Actions" do repositório no GitHub e confirmar que o wo
 
 ---
 
-## Tarefa 16: README e Documentação Final
+## Task 16: README e Documentação Final
 
 **Arquivos:**
 - Criar: `README.md`
@@ -2389,7 +2389,7 @@ git commit -m "docs: adiciona README completo com setup, arquitetura e capturas 
 
 ---
 
-## Tarefa 17: Deploy na Vercel
+## Task 17: Deploy na Vercel
 
 **Arquivos:** nenhum arquivo de código — checklist manual de deploy.
 
