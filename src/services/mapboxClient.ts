@@ -4,7 +4,21 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 const GEOCODING_BASE_URL = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
 const DIRECTIONS_BASE_URL = 'https://api.mapbox.com/directions/v5/mapbox';
 
-export class MapboxRequestError extends Error {}
+export class MapboxRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MapboxRequestError';
+  }
+}
+
+/**
+ * Verifica se um token do Mapbox foi configurado (via VITE_MAPBOX_TOKEN),
+ * para que a aplicação possa exibir um aviso amigável em vez de disparar
+ * requisições silenciosas com `access_token=undefined`.
+ */
+export function hasMapboxToken(): boolean {
+  return typeof MAPBOX_TOKEN === 'string' && MAPBOX_TOKEN.trim().length > 0;
+}
 
 interface GeocodingFeature {
   id: string;
