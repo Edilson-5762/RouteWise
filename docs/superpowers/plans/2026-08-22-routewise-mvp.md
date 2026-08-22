@@ -140,7 +140,8 @@ import '@testing-library/jest-dom/vitest';
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    "noEmit": true
   },
   "include": ["vite.config.ts"]
 }
@@ -242,6 +243,7 @@ dist
 .env.local
 *.log
 .DS_Store
+*.tsbuildinfo
 ```
 
 - [ ] **Passo 14: Criar `.env.example`**
