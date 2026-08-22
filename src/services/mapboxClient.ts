@@ -50,6 +50,8 @@ export async function searchPlaces(query: string): Promise<GeocodingSuggestion[]
 interface DirectionsManeuver {
   instruction: string;
   location: [number, number];
+  type: string;
+  modifier?: string;
 }
 
 interface DirectionsStep {
@@ -101,6 +103,8 @@ export async function getDirections(
       distanceMeters: step.distance,
       durationSeconds: step.duration,
       maneuverLocation: { lng: step.maneuver.location[0], lat: step.maneuver.location[1] },
+      maneuverType: step.maneuver.type,
+      maneuverModifier: step.maneuver.modifier ?? null,
     })),
   );
 

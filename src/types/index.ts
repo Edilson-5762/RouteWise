@@ -16,6 +16,8 @@ export interface RouteStep {
   distanceMeters: number;
   durationSeconds: number;
   maneuverLocation: Coordinates;
+  maneuverType: string;
+  maneuverModifier: string | null;
 }
 
 export interface Route {

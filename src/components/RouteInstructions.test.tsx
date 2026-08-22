@@ -8,12 +8,16 @@ const steps = [
     distanceMeters: 500,
     durationSeconds: 60,
     maneuverLocation: { lat: 0, lng: 0 },
+    maneuverType: 'turn',
+    maneuverModifier: null,
   },
   {
     instruction: 'Vire à direita',
     distanceMeters: 200,
     durationSeconds: 30,
     maneuverLocation: { lat: 0, lng: 1 },
+    maneuverType: 'turn',
+    maneuverModifier: null,
   },
 ];
 
