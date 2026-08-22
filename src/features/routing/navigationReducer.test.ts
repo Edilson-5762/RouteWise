@@ -87,4 +87,62 @@ describe('navigationReducer', () => {
 
     expect(voltouAtras.currentStepIndex).toBe(1);
   });
+
+  it('transiciona para arrived quando a posição fica a menos de 30m do destino', () => {
+    const routeToClose: Route = {
+      ...sampleRoute,
+      geometry: [
+        { lat: 0, lng: 0 },
+        { lat: 0, lng: 0.0002 },
+      ],
+    };
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 0.0002 } },
+      { type: 'ROUTE_PLANNED', route: routeToClose },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const chegou = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 0.0002 },
+    });
+
+    expect(chegou.status).toBe('arrived');
+  });
+
+  it('marca routeDeviated quando a posição fica a mais de 50m da rota', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const desviado = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.01, lng: 1 },
+    });
+
+    expect(desviado.routeDeviated).toBe(true);
+  });
+
+  it('limpa routeDeviated quando uma rota recalculada chega', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+    const desviado = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.01, lng: 1 },
+    });
+
+    const recalculada = navigationReducer(desviado, {
+      type: 'ROUTE_RECALCULATED',
+      route: sampleRoute,
+    });
+
+    expect(recalculada.routeDeviated).toBe(false);
+    expect(recalculada.route).toBe(sampleRoute);
+    expect(recalculada.currentStepIndex).toBe(0);
+  });
 });

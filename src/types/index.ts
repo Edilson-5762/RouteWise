@@ -27,7 +27,7 @@ export interface Route {
   durationSeconds: number;
 }
 
-export type NavigationStatus = 'idle' | 'routePlanned' | 'navigating';
+export type NavigationStatus = 'idle' | 'routePlanned' | 'navigating' | 'arrived';
 
 export interface NavigationState {
   status: NavigationStatus;
@@ -36,4 +36,5 @@ export interface NavigationState {
   route: Route | null;
   currentStepIndex: number;
   travelProfile: TravelProfile;
+  routeDeviated: boolean;
 }
