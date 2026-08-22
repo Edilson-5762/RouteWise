@@ -930,7 +930,6 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { ...state, retry: startWatching };
@@ -2083,7 +2082,6 @@ export function App() {
     if (state.status === 'navigating' && geolocation.position) {
       dispatch({ type: 'POSITION_UPDATED', position: geolocation.position });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geolocation.position, state.status]);
 
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
