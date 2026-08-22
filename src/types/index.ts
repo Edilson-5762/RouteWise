@@ -38,3 +38,9 @@ export interface NavigationState {
   travelProfile: TravelProfile;
   routeDeviated: boolean;
 }
+
+export interface SavedPlace {
+  id: string;
+  label: string;
+  coordinates: Coordinates;
+}
