@@ -137,4 +137,91 @@ describe('App', () => {
     });
     expect(screen.getByText('Iniciar navegação')).toBeInTheDocument();
   });
+
+  it('chama getDirections apenas uma vez mesmo com múltiplas atualizações de GPS antes da rota resolver', async () => {
+    let sendPosition: PositionCallback | null = null;
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: {
+        watchPosition: vi.fn((success: PositionCallback) => {
+          sendPosition = success;
+          success({
+            coords: { latitude: -23.5505, longitude: -46.6333 },
+          } as GeolocationPosition);
+          return 1;
+        }),
+        clearWatch: vi.fn(),
+      },
+      configurable: true,
+    });
+
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
+    ]);
+
+    let resolveDirections: ((route: Awaited<ReturnType<typeof mapboxClient.getDirections>>) => void) | null =
+      null;
+    const directionsPromise = new Promise<Awaited<ReturnType<typeof mapboxClient.getDirections>>>(
+      (resolve) => {
+        resolveDirections = resolve;
+      },
+    );
+    const getDirectionsSpy = vi
+      .spyOn(mapboxClient, 'getDirections')
+      .mockReturnValue(directionsPromise);
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Várias atualizações de GPS chegam enquanto a rota ainda está pendente.
+    act(() => {
+      sendPosition!({
+        coords: { latitude: -23.5506, longitude: -46.6334 },
+      } as GeolocationPosition);
+    });
+    act(() => {
+      sendPosition!({
+        coords: { latitude: -23.5507, longitude: -46.6335 },
+      } as GeolocationPosition);
+    });
+
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+
+    // Resolve a promise pendente para não vazar estado entre testes.
+    act(() => {
+      resolveDirections!({
+        geometry: [
+          { lat: -23.5505, lng: -46.6333 },
+          { lat: -23.5613, lng: -46.6564 },
+        ],
+        steps: [
+          {
+            instruction: 'Siga em frente',
+            distanceMeters: 500,
+            durationSeconds: 60,
+            maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          },
+        ],
+        distanceMeters: 500,
+        durationSeconds: 60,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('1 min')).toBeInTheDocument();
+    });
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+  });
 });

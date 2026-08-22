@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { SearchBar } from './components/SearchBar';
 import { RouteInstructions } from './components/RouteInstructions';
@@ -26,11 +26,23 @@ export function App() {
     }
   }, [geolocation.position, state.status]);
 
-  // Plans (or re-plans) the route whenever origin+destination are both known and no
-  // route exists yet — this also covers the case where the user picks a destination
-  // before the first GPS fix arrives: the effect fires again once origin shows up.
+  // Plans the route once per destination selection — immediately if origin is
+  // already known, or deferred until it arrives (covers picking a destination
+  // before the first GPS fix). Tracks the attempted destination by reference:
+  // state.destination only gets a new reference from SET_DESTINATION (once per
+  // user action), while state.origin gets a new reference on every GPS tick —
+  // keying off destination instead of origin avoids re-firing (and re-requesting
+  // Directions) on every position update while a route is in flight or failed.
+  const attemptedDestinationRef = useRef<typeof state.destination>(null);
+
   useEffect(() => {
-    if (state.origin && state.destination && !state.route) {
+    if (
+      state.origin &&
+      state.destination &&
+      !state.route &&
+      attemptedDestinationRef.current !== state.destination
+    ) {
+      attemptedDestinationRef.current = state.destination;
       void planRoute(state.origin, state.destination, state.travelProfile);
     }
   }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
