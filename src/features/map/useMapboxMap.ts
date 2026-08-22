@@ -88,6 +88,21 @@ export function useMapboxMap({
     }
   }, [destination]);
 
+  // Runs before the route effect below (hook declaration order — both depend on
+  // `theme`, and effects fire in the order they're declared within a commit) so
+  // that when theme changes, setStyle() has already been called by the time the
+  // route effect checks isStyleLoaded(). That ordering is what makes the route
+  // effect correctly see the style as "not loaded" and register a 'style.load'
+  // listener instead of racing to redraw onto the style that's about to be torn
+  // down by setStyle.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    map.setStyle(theme === 'dark' ? NIGHT_STYLE : DAY_STYLE);
+  }, [theme]);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) {
@@ -107,7 +122,7 @@ export function useMapboxMap({
       if (map.isStyleLoaded()) {
         clearRoute();
       } else {
-        map.once('load', clearRoute);
+        map.once('style.load', clearRoute);
       }
       return;
     }
@@ -149,17 +164,9 @@ export function useMapboxMap({
     if (map.isStyleLoaded()) {
       applyRoute();
     } else {
-      map.once('load', applyRoute);
+      map.once('style.load', applyRoute);
     }
-  }, [route]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-    map.setStyle(theme === 'dark' ? NIGHT_STYLE : DAY_STYLE);
-  }, [theme]);
+  }, [route, theme]);
 
   useEffect(() => {
     const map = mapRef.current;

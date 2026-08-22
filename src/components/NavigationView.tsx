@@ -2,6 +2,7 @@ import { MapView } from './MapView';
 import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
+import { ErrorBanner } from './ErrorBanner';
 import { useVoiceGuidance } from '../features/voice/useVoiceGuidance';
 import type { NavigationState } from '../types';
 
@@ -12,6 +13,8 @@ interface NavigationViewProps {
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   isRecalculating: boolean;
+  routeError: string | null;
+  onRetryRecalc: () => void;
   onExit: () => void;
   onArrivalDone: () => void;
 }
@@ -23,6 +26,8 @@ export function NavigationView({
   headingDegrees,
   theme,
   isRecalculating,
+  routeError,
+  onRetryRecalc,
   onExit,
   onArrivalDone,
 }: NavigationViewProps) {
@@ -36,7 +41,11 @@ export function NavigationView({
   }
 
   if (!state.route || !currentStep) {
-    return null;
+    return (
+      <div className="flex h-screen items-center justify-center p-6">
+        <ErrorBanner message="Não foi possível carregar a navegação." onRetry={onExit} />
+      </div>
+    );
   }
 
   const remainingDistanceMeters = state.route.steps
@@ -55,6 +64,11 @@ export function NavigationView({
         >
           Recalculando rota...
         </p>
+      )}
+      {!isRecalculating && routeError && (
+        <div className="absolute left-1/2 top-20 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+          <ErrorBanner message={routeError} onRetry={onRetryRecalc} />
+        </div>
       )}
 
       <div className="relative flex-1">

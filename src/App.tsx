@@ -8,14 +8,12 @@ import { useTheme } from './features/theme/useTheme';
 import { navigationReducer, initialNavigationState } from './features/routing/navigationReducer';
 import type { GeocodingSuggestion } from './types';
 
-const DEVIATION_RECALC_DEBOUNCE_MS = 3000;
-
 export function App() {
   const [state, dispatch] = useReducer(navigationReducer, initialNavigationState);
   const geolocation = useGeolocation();
   const { planRoute, recalculateRoute, isLoading: isRouteLoading, error: routeError } =
     useRoute(dispatch);
-  const { theme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const [placeName, setPlaceName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,19 +49,42 @@ export function App() {
     }
   }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
 
-  const lastRecalcAtRef = useRef(0);
+  // Attempts a route recalculation at most once per deviation episode, mirroring
+  // attemptedDestinationRef above. state.routeDeviated stays true after a failed
+  // recalculateRoute call (it's only cleared by a successful ROUTE_RECALCULATED),
+  // so without this guard the effect would keep firing every render forever on
+  // failure. Resetting the ref whenever the guard condition is false (not
+  // deviated / not navigating / missing origin or destination) means the *next*
+  // deviation episode always gets its own fresh attempt.
+  const attemptedRecalcRef = useRef(false);
 
   useEffect(() => {
-    if (!state.routeDeviated || !state.origin || !state.destination) {
+    if (
+      !state.routeDeviated ||
+      state.status !== 'navigating' ||
+      !state.origin ||
+      !state.destination
+    ) {
+      attemptedRecalcRef.current = false;
       return;
     }
-    const now = Date.now();
-    if (now - lastRecalcAtRef.current < DEVIATION_RECALC_DEBOUNCE_MS) {
+    if (attemptedRecalcRef.current) {
       return;
     }
-    lastRecalcAtRef.current = now;
+    attemptedRecalcRef.current = true;
     void recalculateRoute(state.origin, state.destination, state.travelProfile);
-  }, [state.routeDeviated, state.origin, state.destination, state.travelProfile, recalculateRoute]);
+  }, [
+    state.routeDeviated,
+    state.status,
+    state.origin,
+    state.destination,
+    state.travelProfile,
+    recalculateRoute,
+  ]);
+
+  const handleRetryRecalc = () => {
+    attemptedRecalcRef.current = false;
+  };
 
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
     setPlaceName(suggestion.placeName);
@@ -112,6 +133,8 @@ export function App() {
         headingDegrees={geolocation.headingDegrees}
         theme={theme}
         isRecalculating={state.routeDeviated && isRouteLoading}
+        routeError={state.routeDeviated && !isRouteLoading ? routeError : null}
+        onRetryRecalc={handleRetryRecalc}
         onExit={handleExitNavigation}
         onArrivalDone={handleExitNavigation}
       />
@@ -129,6 +152,7 @@ export function App() {
       onStartNavigation={handleStartNavigation}
       onRetryRoute={handleRetryRoute}
       theme={theme}
+      onToggleTheme={toggleTheme}
       headingDegrees={geolocation.headingDegrees}
     />
   );

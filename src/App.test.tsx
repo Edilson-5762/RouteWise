@@ -362,4 +362,94 @@ describe('App', () => {
     });
     expect(screen.queryByLabelText('Buscar destino')).not.toBeInTheDocument();
   });
+
+  it('tenta recalcular a rota apenas uma vez por episódio de desvio quando o recálculo falha', async () => {
+    let sendPosition: PositionCallback | null = null;
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: {
+        watchPosition: vi.fn((success: PositionCallback) => {
+          sendPosition = success;
+          success({
+            coords: { latitude: -23.5505, longitude: -46.6333 },
+          } as GeolocationPosition);
+          return 1;
+        }),
+        clearWatch: vi.fn(),
+      },
+      configurable: true,
+    });
+
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
+    ]);
+
+    const initialRoute = {
+      geometry: [
+        { lat: -23.5505, lng: -46.6333 },
+        { lat: -23.5613, lng: -46.6564 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 500,
+          durationSeconds: 60,
+          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          maneuverType: 'continue',
+          maneuverModifier: null,
+        },
+      ],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    };
+
+    const getDirectionsSpy = vi
+      .spyOn(mapboxClient, 'getDirections')
+      .mockResolvedValueOnce(initialRoute)
+      .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await screen.findByText('Iniciar navegação');
+    fireEvent.click(screen.getByText('Iniciar navegação'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Siga em frente')).toBeInTheDocument();
+    });
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+
+    // Primeira posição desviada (bem longe da rota e do destino): dispara uma
+    // tentativa de recálculo, que falha.
+    act(() => {
+      sendPosition!({
+        coords: { latitude: -23.7, longitude: -46.9 },
+      } as GeolocationPosition);
+    });
+
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Falha ao recalcular rota: 500')).toBeInTheDocument();
+    });
+
+    // Segunda posição desviada (ainda no mesmo episódio de desvio): não deve
+    // tentar recalcular de novo — o guard de "uma tentativa por desvio" segura.
+    act(() => {
+      sendPosition!({
+        coords: { latitude: -23.71, longitude: -46.91 },
+      } as GeolocationPosition);
+    });
+
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+  });
 });

@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { MapView } from './MapView';
 import { SearchBar } from './SearchBar';
 import { SavedPlacesShortcuts } from './SavedPlacesShortcuts';
@@ -17,6 +19,7 @@ interface PlanningViewProps {
   onStartNavigation: () => void;
   onRetryRoute: () => void;
   theme: 'light' | 'dark';
+  onToggleTheme: () => void;
   headingDegrees: number | null;
 }
 
@@ -30,9 +33,11 @@ export function PlanningView({
   onStartNavigation,
   onRetryRoute,
   theme,
+  onToggleTheme,
   headingDegrees,
 }: PlanningViewProps) {
   const { places, savePlace } = useSavedPlaces();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isPlaceSaved =
     state.destination !== null &&
@@ -43,9 +48,14 @@ export function PlanningView({
     );
 
   const handleSave = () => {
-    if (state.destination && placeName) {
-      savePlace(placeName, state.destination);
+    if (!state.destination || !placeName) {
+      return;
     }
+    const label = window.prompt('Nome para este local', placeName);
+    if (label === null) {
+      return;
+    }
+    savePlace(label, state.destination);
   };
 
   const handleShare = () => {
@@ -69,7 +79,23 @@ export function PlanningView({
             <code>.env</code> para habilitar busca, mapa e rotas.
           </p>
         )}
-        <SearchBar onSelect={onDestinationSelected} />
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <SearchBar ref={searchInputRef} onSelect={onDestinationSelected} />
+          </div>
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface text-surface-foreground shadow-sm hover:bg-primary/10"
+          >
+            {theme === 'dark' ? (
+              <Sun size={20} aria-hidden="true" />
+            ) : (
+              <Moon size={20} aria-hidden="true" />
+            )}
+          </button>
+        </div>
         {state.status === 'idle' && (
           <SavedPlacesShortcuts
             places={places}
@@ -80,9 +106,7 @@ export function PlanningView({
                 coordinates: place.coordinates,
               })
             }
-            onAddNew={() => {
-              /* Foca a busca acima; sem passo adicional necessário nesta versão. */
-            }}
+            onAddNew={() => searchInputRef.current?.focus()}
           />
         )}
         {routeError && <ErrorBanner message={routeError} onRetry={onRetryRoute} />}

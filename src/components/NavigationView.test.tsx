@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { NavigationView } from './NavigationView';
 import { initialNavigationState } from '../features/routing/navigationReducer';
 import type { NavigationState } from '../types';
@@ -74,6 +74,8 @@ describe('NavigationView', () => {
         headingDegrees={null}
         theme="light"
         isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
       />,
@@ -91,6 +93,8 @@ describe('NavigationView', () => {
         headingDegrees={null}
         theme="light"
         isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
       />,
@@ -108,11 +112,55 @@ describe('NavigationView', () => {
         headingDegrees={null}
         theme="light"
         isRecalculating
+        routeError={null}
+        onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
       />,
     );
 
     expect(screen.getByText('Recalculando rota...')).toBeInTheDocument();
+  });
+
+  it('mostra o erro de recálculo quando routeError está presente e não está recalculando', () => {
+    render(
+      <NavigationView
+        state={navigatingState}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={null}
+        headingDegrees={null}
+        theme="light"
+        isRecalculating={false}
+        routeError="Erro ao recalcular a rota."
+        onRetryRecalc={vi.fn()}
+        onExit={vi.fn()}
+        onArrivalDone={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Erro ao recalcular a rota.')).toBeInTheDocument();
+    expect(screen.queryByText('Recalculando rota...')).not.toBeInTheDocument();
+  });
+
+  it('mostra uma tela de fallback com saída quando a rota/passo está ausente durante a navegação', () => {
+    const onExit = vi.fn();
+    render(
+      <NavigationView
+        state={{ ...navigatingState, route: null }}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={null}
+        headingDegrees={null}
+        theme="light"
+        isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
+        onExit={onExit}
+        onArrivalDone={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Não foi possível carregar a navegação.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Tentar novamente'));
+    expect(onExit).toHaveBeenCalled();
   });
 });
