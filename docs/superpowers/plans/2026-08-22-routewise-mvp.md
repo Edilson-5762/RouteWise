@@ -57,6 +57,7 @@
   "devDependencies": {
     "@eslint/js": "^9.9.0",
     "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.0",
     "@types/geojson": "^7946.0.14",
     "@types/mapbox-gl": "^3.4.0",
