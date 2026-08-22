@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useGeocodingSearch } from './useGeocodingSearch';
 import * as mapboxClient from '../../services/mapboxClient';
 
@@ -26,10 +26,10 @@ describe('useGeocodingSearch', () => {
 
     const { result } = renderHook(() => useGeocodingSearch('São Paulo'));
 
-    await vi.advanceTimersByTimeAsync(300);
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
     });
+
+    expect(result.current.suggestions).toHaveLength(1);
   });
 });
