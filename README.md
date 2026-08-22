@@ -7,9 +7,11 @@ App web de navegação GPS interativa, no estilo Waze/Google Maps: busque um des
 ## Funcionalidades
 
 - Detecção automática da localização atual como ponto de partida
-- Busca de destino com sugestões (autocomplete)
-- Cálculo de rota com distância e tempo estimado
-- Navegação ao vivo: a posição é rastreada e as instruções avançam automaticamente conforme você se move
+- Busca de destino com sugestões (autocomplete) e locais salvos (Casa/Trabalho/outros)
+- Cálculo de rota com distância e tempo estimado, com seletor de modo de transporte (carro/a pé/bicicleta)
+- Tela de navegação em tela cheia: câmera em modo condução (segue e gira com a direção do usuário), banner de manobra com seta e distância, velocidade atual
+- Instruções por voz (Web Speech API) e recálculo automático de rota ao desviar do trajeto
+- Modo escuro, com estilos de mapa dedicados para navegação diurna/noturna
 - Interface responsiva construída com Tailwind CSS
 
 ## Stack Técnica
@@ -26,11 +28,46 @@ O projeto é uma SPA 100% client-side, sem backend. O estado da navegação é c
 
 ```
 src/
-  components/    # Componentes de UI (SearchBar, MapView, RouteInstructions...)
-  features/      # Lógica de domínio: mapa, geolocalização, busca, rotas
-  services/      # Cliente HTTP tipado para as APIs do Mapbox
-  utils/         # Funções puras (distância, formatação)
+  components/    # Componentes de UI
+    ArrivalScreen.tsx
+    DestinationCard.tsx
+    ErrorBanner.tsx
+    ManeuverBanner.tsx
+    MapView.tsx
+    NavigationStatusBar.tsx
+    NavigationView.tsx
+    PlanningView.tsx
+    RouteInstructions.tsx
+    RouteSummary.tsx
+    SavedPlacesShortcuts.tsx
+    SearchBar.tsx
+    TravelModeToggle.tsx
+  features/      # Lógica de domínio, organizada por feature
+    geolocation/
+      useGeolocation.ts
+    map/
+      useMapboxMap.ts
+    places/      # Locais salvos (Casa, Trabalho, etc.)
+      useSavedPlaces.ts
+    routing/     # Cálculo de rotas e estado de navegação
+      navigationReducer.ts
+      useRoute.ts
+    search/      # Geocoding e busca de destinos
+      useGeocodingSearch.ts
+    theme/       # Modo escuro e gerenciamento de tema
+      useTheme.ts
+    voice/       # Instruções por voz
+      useVoiceGuidance.ts
+  services/      # Clientes HTTP tipados
+    mapboxClient.ts
   types/         # Tipos TypeScript compartilhados
+    index.ts
+  utils/         # Funções puras
+    distance.ts
+    format.ts
+    maneuverIcon.ts  # Ícones de manobras para instruções passo a passo
+  main.tsx       # Ponto de entrada do React
+  vite-env.d.ts  # Definições de tipos do Vite
 ```
 
 ## Configuração Local
@@ -93,10 +130,8 @@ src/
 
 ## Próximos Passos
 
-- Suporte a modos de transporte a pé e bicicleta
-- Instruções por voz
-- Recálculo automático de rota em caso de desvio
 - Suporte offline (cache de mapas e motor de rotas local)
+- Integração com sistemas de navegação nativa do dispositivo (Apple Maps, Google Maps)
 
 ## Licença
 
