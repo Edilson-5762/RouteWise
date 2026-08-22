@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Coordinates } from '../../types';
 
 interface GeolocationState {
@@ -15,7 +15,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
   });
   const watchIdRef = useRef<number | null>(null);
 
-  const startWatching = () => {
+  const startWatching = useCallback(() => {
     if (!navigator.geolocation) {
       setState({
         position: null,
@@ -23,6 +23,10 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
         isLoading: false,
       });
       return;
+    }
+
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
     }
 
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
@@ -44,7 +48,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       },
       { enableHighAccuracy: true },
     );
-  };
+  }, []);
 
   useEffect(() => {
     startWatching();
@@ -53,7 +57,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, []);
+  }, [startWatching]);
 
   return { ...state, retry: startWatching };
 }
