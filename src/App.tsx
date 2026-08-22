@@ -103,7 +103,14 @@ export function App() {
       </header>
 
       <div className="relative flex-1">
-        <MapView origin={state.origin} destination={state.destination} route={state.route} />
+        <MapView
+          origin={state.origin}
+          destination={state.destination}
+          route={state.route}
+          isNavigating={false}
+          headingDegrees={null}
+          theme="light"
+        />
       </div>
 
       {state.route && (

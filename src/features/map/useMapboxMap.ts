@@ -8,15 +8,28 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const ROUTE_SOURCE_ID = 'route-source';
 const ROUTE_LAYER_ID = 'route-layer';
+const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
+const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
 interface UseMapboxMapOptions {
   containerRef: RefObject<HTMLDivElement>;
   origin: Coordinates | null;
   destination: Coordinates | null;
   route: Route | null;
+  isNavigating: boolean;
+  headingDegrees: number | null;
+  theme: 'light' | 'dark';
 }
 
-export function useMapboxMap({ containerRef, origin, destination, route }: UseMapboxMapOptions) {
+export function useMapboxMap({
+  containerRef,
+  origin,
+  destination,
+  route,
+  isNavigating,
+  headingDegrees,
+  theme,
+}: UseMapboxMapOptions) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const originMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -28,7 +41,7 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
 
     mapRef.current = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: theme === 'dark' ? NIGHT_STYLE : DAY_STYLE,
       center: [-46.6333, -23.5505],
       zoom: 12,
     });
@@ -55,8 +68,10 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
       originMarkerRef.current.setLngLat([origin.lng, origin.lat]);
     }
 
-    map.setCenter([origin.lng, origin.lat]);
-  }, [origin]);
+    if (!isNavigating) {
+      map.setCenter([origin.lng, origin.lat]);
+    }
+  }, [origin, isNavigating]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -137,6 +152,33 @@ export function useMapboxMap({ containerRef, origin, destination, route }: UseMa
       map.once('load', applyRoute);
     }
   }, [route]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    map.setStyle(theme === 'dark' ? NIGHT_STYLE : DAY_STYLE);
+  }, [theme]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !origin) {
+      return;
+    }
+
+    if (isNavigating) {
+      map.easeTo({
+        center: [origin.lng, origin.lat],
+        zoom: 17,
+        pitch: 60,
+        bearing: headingDegrees ?? map.getBearing(),
+        duration: 500,
+      });
+    } else {
+      map.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+    }
+  }, [origin, isNavigating, headingDegrees]);
 
   return mapRef;
 }

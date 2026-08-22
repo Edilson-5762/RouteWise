@@ -17,6 +17,9 @@ vi.mock('mapbox-gl', () => {
     removeLayer = vi.fn();
     removeSource = vi.fn();
     fitBounds = vi.fn();
+    setStyle = vi.fn();
+    easeTo = vi.fn();
+    getBearing = vi.fn().mockReturnValue(0);
   }
   class FakeMarker {
     setLngLat = vi.fn().mockReturnThis();
