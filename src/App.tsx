@@ -1,19 +1,22 @@
-import { useEffect, useReducer, useRef } from 'react';
-import { MapView } from './components/MapView';
-import { SearchBar } from './components/SearchBar';
-import { RouteInstructions } from './components/RouteInstructions';
-import { RouteSummary } from './components/RouteSummary';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import { PlanningView } from './components/PlanningView';
+import { NavigationView } from './components/NavigationView';
 import { ErrorBanner } from './components/ErrorBanner';
 import { useGeolocation } from './features/geolocation/useGeolocation';
 import { useRoute } from './features/routing/useRoute';
+import { useTheme } from './features/theme/useTheme';
 import { navigationReducer, initialNavigationState } from './features/routing/navigationReducer';
-import { hasMapboxToken } from './services/mapboxClient';
 import type { GeocodingSuggestion } from './types';
+
+const DEVIATION_RECALC_DEBOUNCE_MS = 3000;
 
 export function App() {
   const [state, dispatch] = useReducer(navigationReducer, initialNavigationState);
   const geolocation = useGeolocation();
-  const { planRoute, isLoading: isRouteLoading, error: routeError } = useRoute(dispatch);
+  const { planRoute, recalculateRoute, isLoading: isRouteLoading, error: routeError } =
+    useRoute(dispatch);
+  const { theme } = useTheme();
+  const [placeName, setPlaceName] = useState<string | null>(null);
 
   useEffect(() => {
     if (geolocation.position) {
@@ -48,11 +51,33 @@ export function App() {
     }
   }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
 
+  const lastRecalcAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!state.routeDeviated || !state.origin || !state.destination) {
+      return;
+    }
+    const now = Date.now();
+    if (now - lastRecalcAtRef.current < DEVIATION_RECALC_DEBOUNCE_MS) {
+      return;
+    }
+    lastRecalcAtRef.current = now;
+    void recalculateRoute(state.origin, state.destination, state.travelProfile);
+  }, [state.routeDeviated, state.origin, state.destination, state.travelProfile, recalculateRoute]);
+
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
+    setPlaceName(suggestion.placeName);
     // Spreads into a fresh object so attemptedDestinationRef's reference
     // comparison can't collide across separate user actions, even when the
     // same place is selected twice in a row (see comment above).
     dispatch({ type: 'SET_DESTINATION', destination: { ...suggestion.coordinates } });
+  };
+
+  const handleTravelProfileChange = (profile: (typeof state)['travelProfile']) => {
+    dispatch({ type: 'SET_TRAVEL_PROFILE', profile });
+    if (state.origin && state.destination) {
+      void planRoute(state.origin, state.destination, profile);
+    }
   };
 
   const handleStartNavigation = () => {
@@ -65,6 +90,11 @@ export function App() {
     }
   };
 
+  const handleExitNavigation = () => {
+    dispatch({ type: 'RESET' });
+    setPlaceName(null);
+  };
+
   if (geolocation.error) {
     return (
       <div className="flex h-screen items-center justify-center p-6">
@@ -73,51 +103,33 @@ export function App() {
     );
   }
 
+  if (state.status === 'navigating' || state.status === 'arrived') {
+    return (
+      <NavigationView
+        state={state}
+        placeName={placeName}
+        speedMetersPerSecond={geolocation.speedMetersPerSecond}
+        headingDegrees={geolocation.headingDegrees}
+        theme={theme}
+        isRecalculating={state.routeDeviated && isRouteLoading}
+        onExit={handleExitNavigation}
+        onArrivalDone={handleExitNavigation}
+      />
+    );
+  }
+
   return (
-    <div className="flex h-screen flex-col">
-      <header className="z-10 space-y-3 bg-white p-4 shadow">
-        {!hasMapboxToken() && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            Token do Mapbox não configurado. Defina <code>VITE_MAPBOX_TOKEN</code> no arquivo{' '}
-            <code>.env</code> para habilitar busca, mapa e rotas.
-          </p>
-        )}
-        <SearchBar onSelect={handleDestinationSelected} />
-        {routeError && <ErrorBanner message={routeError} onRetry={handleRetryRoute} />}
-        {state.route && (
-          <RouteSummary
-            distanceMeters={state.route.distanceMeters}
-            durationSeconds={state.route.durationSeconds}
-          />
-        )}
-        {state.status === 'routePlanned' && (
-          <button
-            type="button"
-            onClick={handleStartNavigation}
-            className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white hover:bg-blue-700"
-          >
-            Iniciar navegação
-          </button>
-        )}
-        {isRouteLoading && <p className="text-sm text-slate-500">Calculando rota...</p>}
-      </header>
-
-      <div className="relative flex-1">
-        <MapView
-          origin={state.origin}
-          destination={state.destination}
-          route={state.route}
-          isNavigating={false}
-          headingDegrees={null}
-          theme="light"
-        />
-      </div>
-
-      {state.route && (
-        <div className="max-h-64 overflow-y-auto border-t border-slate-200 bg-white">
-          <RouteInstructions steps={state.route.steps} currentStepIndex={state.currentStepIndex} />
-        </div>
-      )}
-    </div>
+    <PlanningView
+      state={state}
+      placeName={placeName}
+      routeError={routeError}
+      isRouteLoading={isRouteLoading}
+      onDestinationSelected={handleDestinationSelected}
+      onTravelProfileChange={handleTravelProfileChange}
+      onStartNavigation={handleStartNavigation}
+      onRetryRoute={handleRetryRoute}
+      theme={theme}
+      headingDegrees={geolocation.headingDegrees}
+    />
   );
 }

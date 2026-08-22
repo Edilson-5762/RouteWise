@@ -37,6 +37,12 @@ vi.mock('mapbox-gl', () => {
   };
 });
 
+vi.stubGlobal('speechSynthesis', { speak: vi.fn(), cancel: vi.fn() });
+vi.stubGlobal(
+  'SpeechSynthesisUtterance',
+  vi.fn().mockImplementation((text: string) => ({ text, lang: '' })),
+);
+
 describe('App', () => {
   beforeEach(() => {
     Object.defineProperty(global.navigator, 'geolocation', {
@@ -89,7 +95,7 @@ describe('App', () => {
     fireEvent.click(option);
 
     await waitFor(() => {
-      expect(screen.getByText('1 min')).toBeInTheDocument();
+      expect(screen.getByText(/1 min/)).toBeInTheDocument();
     });
     expect(screen.getByText('Iniciar navegação')).toBeInTheDocument();
   });
@@ -143,7 +149,7 @@ describe('App', () => {
     fireEvent.click(option);
 
     expect(sendPosition).not.toBeNull();
-    expect(screen.queryByText('1 min')).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 min/)).not.toBeInTheDocument();
 
     // O primeiro fix de GPS chega depois da seleção do destino.
     act(() => {
@@ -153,7 +159,7 @@ describe('App', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('1 min')).toBeInTheDocument();
+      expect(screen.getByText(/1 min/)).toBeInTheDocument();
     });
     expect(screen.getByText('Iniciar navegação')).toBeInTheDocument();
   });
@@ -242,7 +248,7 @@ describe('App', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('1 min')).toBeInTheDocument();
+      expect(screen.getByText(/1 min/)).toBeInTheDocument();
     });
     expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
   });
@@ -311,5 +317,49 @@ describe('App', () => {
     fireEvent.click(screen.getByText('Tentar novamente'));
 
     expect(watchPositionMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('transiciona para a NavigationView em tela cheia ao iniciar a navegação', async () => {
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
+    ]);
+    vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
+      geometry: [
+        { lat: -23.5505, lng: -46.6333 },
+        { lat: -23.5613, lng: -46.6564 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 500,
+          durationSeconds: 60,
+          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          maneuverType: 'continue',
+          maneuverModifier: null,
+        },
+      ],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await screen.findByText('Iniciar navegação');
+    fireEvent.click(screen.getByText('Iniciar navegação'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Siga em frente')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('Buscar destino')).not.toBeInTheDocument();
   });
 });
