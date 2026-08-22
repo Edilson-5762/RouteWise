@@ -2084,11 +2084,17 @@ export function App() {
     }
   }, [geolocation.position, state.status]);
 
+  // Plans (or re-plans) the route whenever origin+destination are both known and no
+  // route exists yet — this also covers the case where the user picks a destination
+  // before the first GPS fix arrives: the effect fires again once origin shows up.
+  useEffect(() => {
+    if (state.origin && state.destination && !state.route) {
+      void planRoute(state.origin, state.destination, state.travelProfile);
+    }
+  }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
+
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
     dispatch({ type: 'SET_DESTINATION', destination: suggestion.coordinates });
-    if (state.origin) {
-      void planRoute(state.origin, suggestion.coordinates, state.travelProfile);
-    }
   };
 
   const handleStartNavigation = () => {
