@@ -84,9 +84,12 @@ src/
 
 ## Segurança
 
-- O token do Mapbox nunca é commitado — é lido de uma variável de ambiente e restrito por domínio no painel do Mapbox (produção + `localhost`).
+- O token do Mapbox nunca é commitado — é lido de uma variável de ambiente e deve ser restrito por domínio no painel do Mapbox:
+  1. Acesse o painel de tokens em https://account.mapbox.com/access-tokens/.
+  2. Edite o token público usado por esta aplicação (`VITE_MAPBOX_TOKEN`).
+  3. Em "URL restrictions", adicione o domínio de produção (ex.: `https://routewise.vercel.app`) e `http://localhost:5173` para desenvolvimento local.
 - Headers de segurança (CSP, `X-Content-Type-Options`, `X-Frame-Options`) são aplicados via `vercel.json`.
-- O pipeline de CI roda `npm audit` a cada push para checar vulnerabilidades nas dependências.
+- O pipeline de CI roda `npm audit` a cada push para checar vulnerabilidades nas dependências. Advisories do toolchain de desenvolvimento (ex.: vite/vitest) são tratados separadamente do que é enviado ao navegador — o CI usa `npm audit --omit=dev`, que reflete apenas as dependências que entram no bundle final.
 
 ## Próximos Passos
 
