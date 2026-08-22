@@ -7,6 +7,7 @@ import { ErrorBanner } from './components/ErrorBanner';
 import { useGeolocation } from './features/geolocation/useGeolocation';
 import { useRoute } from './features/routing/useRoute';
 import { navigationReducer, initialNavigationState } from './features/routing/navigationReducer';
+import { hasMapboxToken } from './services/mapboxClient';
 import type { GeocodingSuggestion } from './types';
 
 export function App() {
@@ -48,11 +49,20 @@ export function App() {
   }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
 
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
-    dispatch({ type: 'SET_DESTINATION', destination: suggestion.coordinates });
+    // Spreads into a fresh object so attemptedDestinationRef's reference
+    // comparison can't collide across separate user actions, even when the
+    // same place is selected twice in a row (see comment above).
+    dispatch({ type: 'SET_DESTINATION', destination: { ...suggestion.coordinates } });
   };
 
   const handleStartNavigation = () => {
     dispatch({ type: 'START_NAVIGATION' });
+  };
+
+  const handleRetryRoute = () => {
+    if (state.origin && state.destination) {
+      void planRoute(state.origin, state.destination, state.travelProfile);
+    }
   };
 
   if (geolocation.error) {
@@ -66,8 +76,14 @@ export function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="z-10 space-y-3 bg-white p-4 shadow">
+        {!hasMapboxToken() && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Token do Mapbox não configurado. Defina <code>VITE_MAPBOX_TOKEN</code> no arquivo{' '}
+            <code>.env</code> para habilitar busca, mapa e rotas.
+          </p>
+        )}
         <SearchBar onSelect={handleDestinationSelected} />
-        {routeError && <ErrorBanner message={routeError} />}
+        {routeError && <ErrorBanner message={routeError} onRetry={handleRetryRoute} />}
         {state.route && (
           <RouteSummary
             distanceMeters={state.route.distanceMeters}

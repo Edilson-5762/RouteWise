@@ -8,10 +8,12 @@ interface SearchBarProps {
 
 export function SearchBar({ onSelect }: SearchBarProps) {
   const [query, setQuery] = useState('');
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const { suggestions, error } = useGeocodingSearch(query);
 
   const handleSelect = (suggestion: GeocodingSuggestion) => {
     setQuery(suggestion.placeName);
+    setIsSuggestionsOpen(false);
     onSelect(suggestion);
   };
 
@@ -20,13 +22,16 @@ export function SearchBar({ onSelect }: SearchBarProps) {
       <input
         type="text"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setIsSuggestionsOpen(true);
+        }}
         placeholder="Para onde você vai?"
         className="w-full rounded-lg border border-slate-300 px-4 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
         aria-label="Buscar destino"
       />
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
-      {suggestions.length > 0 && (
+      {isSuggestionsOpen && suggestions.length > 0 && (
         <ul className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg">
           {suggestions.map((suggestion) => (
             <li key={suggestion.id}>
