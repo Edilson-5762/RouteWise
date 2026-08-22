@@ -92,6 +92,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
+    passWithNoTests: true,
   },
 });
 ```
@@ -2229,7 +2230,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -2258,8 +2258,8 @@ git commit -m "ci: adiciona pipeline de lint, testes, build e audit"
 
 - [ ] **Passo 3: Push e verificação**
 
-Rodar: `git push origin main`
-Esperado: acessar a aba "Actions" do repositório no GitHub e confirmar que o workflow "CI" rodou e todos os passos ficaram verdes. Se algum passo falhar, corrigir o problema, commitar e dar push novamente antes de seguir para a próxima tarefa.
+Rodar: `git push -u origin HEAD` (empurra a branch atual, seja ela qual for — a implementação roda em uma branch de feature, não diretamente em `main`)
+Esperado: acessar a aba "Actions" do repositório no GitHub e confirmar que o workflow "CI" rodou e todos os passos ficaram verdes para essa branch. Se algum passo falhar, corrigir o problema, commitar e dar push novamente antes de seguir para a próxima tarefa.
 
 ---
 
@@ -2407,17 +2407,19 @@ No painel do Mapbox (https://account.mapbox.com/access-tokens/), editar o token 
 
 - [ ] **Passo 4: Disparar o deploy e verificar**
 
-Fazer o deploy (automático a partir do push em `main`, ou manual pelo painel). Acessar a URL pública gerada, testar o fluxo completo: permitir localização → buscar um destino → selecionar da lista → ver a rota e o resumo → clicar em "Iniciar navegação".
+A Vercel gera automaticamente um deploy de Preview a partir do push na branch de feature em uso; o deploy de Produção (domínio final) só é ativado após o merge dessa branch em `main`. Para verificar agora, usar a URL de Preview: testar o fluxo completo — permitir localização → buscar um destino → selecionar da lista → ver a rota e o resumo → clicar em "Iniciar navegação".
 
 - [ ] **Passo 5: Atualizar o README com o link ao vivo**
 
-Editar `README.md`, substituir o placeholder do link de demo pela URL real da Vercel.
+Editar `README.md`, substituir o placeholder do link de demo pela URL de Preview (ou de Produção, se o merge para `main` já tiver ocorrido).
 
 ```bash
 git add README.md
 git commit -m "docs: adiciona link do deploy ao vivo na Vercel"
-git push origin main
+git push
 ```
+
+**Nota:** esta tarefa exige acesso às contas da Vercel e do Mapbox — passos 1 a 3 devem ser feitos pelo usuário diretamente, não por um subagente implementador.
 
 ---
 
