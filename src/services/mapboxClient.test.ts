@@ -36,6 +36,42 @@ describe('searchPlaces', () => {
 
     await expect(searchPlaces('Paulista')).rejects.toThrow(MapboxRequestError);
   });
+
+  it('pede resultados em português', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('Paulista');
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('language=pt');
+  });
+
+  it('inclui viés de proximidade quando a localização atual é informada', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('Paulista', { lng: -46.6333, lat: -23.5505 });
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('proximity=-46.6333,-23.5505');
+  });
+
+  it('não inclui proximity quando a localização atual não é informada', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('Paulista');
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).not.toContain('proximity=');
+  });
 });
 
 describe('getDirections', () => {
@@ -107,7 +143,12 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [
@@ -148,7 +189,12 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [
@@ -179,5 +225,32 @@ describe('getDirections', () => {
 
     expect(route.steps[0].maneuverType).toBe('arrive');
     expect(route.steps[0].maneuverModifier).toBeNull();
+  });
+
+  it('pede instruções em português', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        routes: [
+          {
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
+            distance: 1200,
+            duration: 300,
+            legs: [{ steps: [] }],
+          },
+        ],
+      }),
+    });
+
+    await getDirections({ lng: -46.6333, lat: -23.5505 }, { lng: -46.63, lat: -23.55 }, 'driving');
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('language=pt');
   });
 });

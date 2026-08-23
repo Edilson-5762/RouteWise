@@ -30,8 +30,12 @@ interface GeocodingResponse {
   features: GeocodingFeature[];
 }
 
-export async function searchPlaces(query: string): Promise<GeocodingSuggestion[]> {
-  const url = `${GEOCODING_BASE_URL}/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5`;
+export async function searchPlaces(
+  query: string,
+  proximity?: Coordinates | null,
+): Promise<GeocodingSuggestion[]> {
+  const proximityParam = proximity ? `&proximity=${proximity.lng},${proximity.lat}` : '';
+  const url = `${GEOCODING_BASE_URL}/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&language=pt${proximityParam}`;
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -82,7 +86,7 @@ export async function getDirections(
   profile: TravelProfile,
 ): Promise<Route> {
   const coordinates = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
-  const url = `${DIRECTIONS_BASE_URL}/${profile}/${coordinates}?geometries=geojson&steps=true&overview=full&access_token=${MAPBOX_TOKEN}`;
+  const url = `${DIRECTIONS_BASE_URL}/${profile}/${coordinates}?geometries=geojson&steps=true&overview=full&language=pt&access_token=${MAPBOX_TOKEN}`;
   const response = await fetch(url);
 
   if (!response.ok) {

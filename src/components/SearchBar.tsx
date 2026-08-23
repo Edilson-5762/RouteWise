@@ -1,18 +1,19 @@
 import { forwardRef, useState } from 'react';
 import { useGeocodingSearch } from '../features/search/useGeocodingSearch';
-import type { GeocodingSuggestion } from '../types';
+import type { Coordinates, GeocodingSuggestion } from '../types';
 
 interface SearchBarProps {
   onSelect: (suggestion: GeocodingSuggestion) => void;
+  proximity?: Coordinates | null;
 }
 
 export const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(function SearchBar(
-  { onSelect },
+  { onSelect, proximity },
   ref,
 ) {
   const [query, setQuery] = useState('');
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const { suggestions, error } = useGeocodingSearch(query);
+  const { suggestions, error } = useGeocodingSearch(query, proximity);
 
   const handleSelect = (suggestion: GeocodingSuggestion) => {
     setQuery(suggestion.placeName);

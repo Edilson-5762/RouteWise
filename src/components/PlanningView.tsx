@@ -81,7 +81,11 @@ export function PlanningView({
         )}
         <div className="flex items-center gap-2">
           <div className="flex-1">
-            <SearchBar ref={searchInputRef} onSelect={onDestinationSelected} />
+            <SearchBar
+              ref={searchInputRef}
+              onSelect={onDestinationSelected}
+              proximity={state.origin}
+            />
           </div>
           <button
             type="button"

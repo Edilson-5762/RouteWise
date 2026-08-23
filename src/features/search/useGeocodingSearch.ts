@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { searchPlaces } from '../../services/mapboxClient';
-import type { GeocodingSuggestion } from '../../types';
+import type { Coordinates, GeocodingSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 
-export function useGeocodingSearch(query: string) {
+export function useGeocodingSearch(query: string, proximity?: Coordinates | null) {
   const [suggestions, setSuggestions] = useState<GeocodingSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export function useGeocodingSearch(query: string) {
     setIsLoading(true);
 
     const timeoutId = setTimeout(() => {
-      searchPlaces(query)
+      searchPlaces(query, proximity)
         .then((results) => {
           if (!isCancelled) {
             setSuggestions(results);

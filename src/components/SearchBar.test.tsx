@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SearchBar } from './SearchBar';
 import * as mapboxClient from '../services/mapboxClient';
 
@@ -50,5 +50,20 @@ describe('SearchBar', () => {
     fireEvent.click(option);
 
     expect(screen.queryByText('Av. Paulista, São Paulo')).not.toBeInTheDocument();
+  });
+
+  it('repassa a localização atual para a busca como viés de proximidade', async () => {
+    const spy = vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
+    const onSelect = vi.fn();
+
+    render(<SearchBar onSelect={onSelect} proximity={{ lat: -23.5613, lng: -46.6564 }} />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith('Paulista', { lat: -23.5613, lng: -46.6564 });
+    });
   });
 });

@@ -32,4 +32,16 @@ describe('useGeocodingSearch', () => {
 
     expect(result.current.suggestions).toHaveLength(1);
   });
+
+  it('repassa a localização atual para searchPlaces como viés de proximidade', async () => {
+    const spy = vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
+
+    renderHook(() => useGeocodingSearch('São Paulo', { lat: -23.5505, lng: -46.6333 }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(spy).toHaveBeenCalledWith('São Paulo', { lat: -23.5505, lng: -46.6333 });
+  });
 });
