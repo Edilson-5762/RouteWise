@@ -12,7 +12,14 @@ vi.mock('mapbox-gl', () => {
     isStyleLoaded = () => true;
     on = vi.fn();
     off = vi.fn();
-    once = vi.fn();
+    // Invoca o callback de 'style.load' na hora: nestes testes o estilo
+    // nunca está de fato "em troca", então o hook (que rastreia isso por
+    // conta própria via `styleReadyRef`) precisa ver esse evento na hora.
+    once = vi.fn((event: string, handler: () => void) => {
+      if (event === 'style.load') {
+        handler();
+      }
+    });
     remove = mapRemoveSpy;
     setCenter = vi.fn();
     constructor(...args: unknown[]) {
@@ -304,7 +311,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          'Não foi possível acessar sua localização. Permita o acesso e tente novamente.',
+          'Você negou o acesso à localização. Permita o acesso nas configurações do navegador e tente novamente.',
         ),
       ).toBeInTheDocument();
     });
