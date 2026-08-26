@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useGeocodingSearch } from './useGeocodingSearch';
-import * as mapboxClient from '../../services/mapboxClient';
 import * as geoapifyClient from '../../services/geoapifyClient';
 
 describe('useGeocodingSearch', () => {
@@ -15,13 +14,15 @@ describe('useGeocodingSearch', () => {
   });
 
   it('não busca para queries com menos de 3 caracteres', () => {
-    const spy = vi.spyOn(mapboxClient, 'searchPlaces');
+    const spy = vi.spyOn(geoapifyClient, 'searchPlaces');
     renderHook(() => useGeocodingSearch('Sp'));
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('faz debounce e retorna sugestões para uma query válida', async () => {
-    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([{ id: '1', placeName: 'São Paulo' }]);
+  it('faz debounce e retorna sugestões para uma query que não bate com nenhuma categoria', async () => {
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: '1', placeName: 'São Paulo', coordinates: { lat: -23.5505, lng: -46.6333 } },
+    ]);
 
     const { result } = renderHook(() => useGeocodingSearch('São Paulo'));
 
@@ -33,7 +34,7 @@ describe('useGeocodingSearch', () => {
   });
 
   it('repassa a localização atual para searchPlaces como viés de proximidade', async () => {
-    const spy = vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
+    const spy = vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
 
     renderHook(() => useGeocodingSearch('São Paulo', { lat: -23.5505, lng: -46.6333 }));
 
@@ -41,15 +42,11 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(spy).toHaveBeenCalledWith(
-      'São Paulo',
-      expect.any(String),
-      { lat: -23.5505, lng: -46.6333 },
-    );
+    expect(spy).toHaveBeenCalledWith('São Paulo', { lat: -23.5505, lng: -46.6333 });
   });
 
   it('rebusca quando a proximidade muda, mesmo com a mesma query', async () => {
-    const spy = vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
+    const spy = vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
 
     const { rerender } = renderHook(
       ({ proximity }) => useGeocodingSearch('São Paulo', proximity),
@@ -67,18 +64,42 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy).toHaveBeenLastCalledWith(
-      'São Paulo',
-      expect.any(String),
-      { lat: -23.5505, lng: -46.6333 },
-    );
+    expect(spy).toHaveBeenLastCalledWith('São Paulo', { lat: -23.5505, lng: -46.6333 });
   });
 
-  it('usa a Geoapify quando a query corresponde a uma categoria de estabelecimento', async () => {
-    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([
-      { id: 'place-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.8, lng: -47.9 } },
+  it('quando a query bate com uma categoria, busca em paralelo por categoria e por texto', async () => {
+    const categorySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([
+      { id: 'cat-1', placeName: 'Farmácia Genérica', coordinates: { lat: -15.8, lng: -47.9 } },
     ]);
-    const mapboxSpy = vi.spyOn(mapboxClient, 'searchPlaces');
+    const textSpy = vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'text-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.81, lng: -47.91 } },
+    ]);
+
+    const { result } = renderHook(() => useGeocodingSearch('farmácia', { lat: -15.8, lng: -47.9 }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(categorySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryLabel: 'Farmácia' }),
+      { lat: -15.8, lng: -47.9 },
+    );
+    expect(textSpy).toHaveBeenCalledWith('farmácia', { lat: -15.8, lng: -47.9 });
+    expect(result.current.suggestions).toEqual([
+      { id: 'text-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.81, lng: -47.91 } },
+      { id: 'cat-1', placeName: 'Farmácia Genérica', coordinates: { lat: -15.8, lng: -47.9 } },
+    ]);
+  });
+
+  it('não duplica um resultado que aparece tanto na busca por categoria quanto na busca por texto', async () => {
+    vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([
+      { id: 'compartilhado', placeName: 'Farmácia X', coordinates: { lat: -15.8, lng: -47.9 } },
+    ]);
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'compartilhado', placeName: 'Farmácia X', coordinates: { lat: -15.8, lng: -47.9 } },
+      { id: 'text-2', placeName: 'Farmácia Y', coordinates: { lat: -15.82, lng: -47.92 } },
+    ]);
 
     const { result } = renderHook(() => useGeocodingSearch('farmácia'));
 
@@ -86,29 +107,34 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(geoapifySpy).toHaveBeenCalled();
-    expect(mapboxSpy).not.toHaveBeenCalled();
-    expect(result.current.suggestions).toHaveLength(1);
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['compartilhado', 'text-2']);
   });
 
-  it('repassa a localização atual para searchPlacesByCategory como centro de busca', async () => {
-    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([]);
+  it('prioriza o resultado de texto específico, deixando a categoria só completar o restante das vagas', async () => {
+    vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `cat-${i}`,
+        placeName: `Padaria genérica ${i}`,
+        coordinates: { lat: -15.8, lng: -47.9 },
+      })),
+    );
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'bonanza', placeName: 'Panificadora Bonanza', coordinates: { lat: -15.8, lng: -47.9 } },
+    ]);
 
-    renderHook(() => useGeocodingSearch('farmácia', { lat: -15.8, lng: -47.9 }));
+    const { result } = renderHook(() => useGeocodingSearch('panificadora bonanza'));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(geoapifySpy).toHaveBeenCalledWith(
-      expect.objectContaining({ categoryLabel: 'Farmácia' }),
-      { lat: -15.8, lng: -47.9 },
-    );
+    expect(result.current.suggestions[0].id).toBe('bonanza');
+    expect(result.current.suggestions).toHaveLength(8);
   });
 
-  it('usa o Mapbox (não a Geoapify) para queries que não correspondem a nenhuma categoria', async () => {
-    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory');
-    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
+  it('busca só por texto (não por categoria) quando a query não corresponde a nenhuma categoria conhecida', async () => {
+    const categorySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory');
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
 
     renderHook(() => useGeocodingSearch('Avenida Paulista'));
 
@@ -116,48 +142,24 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(geoapifySpy).not.toHaveBeenCalled();
+    expect(categorySpy).not.toHaveBeenCalled();
   });
 
-  it('resolveSuggestion usa coordenadas já conhecidas (gazetteer local) sem chamar retrievePlace', async () => {
-    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
-    const retrieveSpy = vi.spyOn(mapboxClient, 'retrievePlace');
-
-    const { result } = renderHook(() => useGeocodingSearch('Plano Piloto'));
-
-    const resolved = await result.current.resolveSuggestion({
-      id: 'local-region:plano-piloto',
-      placeName: 'Plano Piloto, Brasília - DF',
-      coordinates: { lat: -15.7939, lng: -47.8828 },
-    });
-
-    expect(resolved).toEqual({
-      id: 'local-region:plano-piloto',
-      placeName: 'Plano Piloto, Brasília - DF',
-      coordinates: { lat: -15.7939, lng: -47.8828 },
-    });
-    expect(retrieveSpy).not.toHaveBeenCalled();
-  });
-
-  it('resolveSuggestion busca as coordenadas via retrievePlace e troca o token de sessão', async () => {
-    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([{ id: '1', placeName: 'São Paulo' }]);
-    const retrieveSpy = vi
-      .spyOn(mapboxClient, 'retrievePlace')
-      .mockResolvedValue({ lat: -23.5505, lng: -46.6333 });
+  it('resolveSuggestion repassa as coordenadas já presentes na sugestão, sem nova chamada de rede', async () => {
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
 
     const { result } = renderHook(() => useGeocodingSearch('São Paulo'));
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
+    const resolved = await result.current.resolveSuggestion({
+      id: '1',
+      placeName: 'São Paulo',
+      coordinates: { lat: -23.5505, lng: -46.6333 },
     });
-
-    const resolved = await result.current.resolveSuggestion({ id: '1', placeName: 'São Paulo' });
 
     expect(resolved).toEqual({
       id: '1',
       placeName: 'São Paulo',
       coordinates: { lat: -23.5505, lng: -46.6333 },
     });
-    expect(retrieveSpy).toHaveBeenCalledWith('1', expect.any(String));
   });
 });

@@ -7,6 +7,7 @@ import { ErrorBanner } from './ErrorBanner';
 import { useSavedPlaces } from '../features/places/useSavedPlaces';
 import { useElementHeight } from '../features/layout/useElementHeight';
 import { hasMapboxToken } from '../services/mapboxClient';
+import { hasGeoapifyApiKey } from '../services/geoapifyClient';
 import type { GeocodingSuggestion, MapChromeInsets, NavigationState, TravelProfile } from '../types';
 
 interface PlanningViewProps {
@@ -95,7 +96,13 @@ export function PlanningView({
         {!hasMapboxToken() && (
           <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
             Token do Mapbox não configurado. Defina <code>VITE_MAPBOX_TOKEN</code> no arquivo{' '}
-            <code>.env</code> para habilitar busca, mapa e rotas.
+            <code>.env</code> para habilitar o mapa e o cálculo de rotas.
+          </p>
+        )}
+        {!hasGeoapifyApiKey() && (
+          <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
+            Chave da Geoapify não configurada. Defina <code>VITE_GEOAPIFY_API_KEY</code> no arquivo{' '}
+            <code>.env</code> para habilitar a busca de destinos.
           </p>
         )}
         <div className="flex items-center gap-2">

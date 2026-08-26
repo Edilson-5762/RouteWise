@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchPlacesByCategory, GeoapifyRequestError } from './geoapifyClient';
+import { searchPlacesByCategory, searchPlaces, GeoapifyRequestError } from './geoapifyClient';
 import type { PlaceCategoryDefinition } from '../data/placeCategories';
 
 const FARMACIA: PlaceCategoryDefinition = {
@@ -117,6 +117,105 @@ describe('searchPlacesByCategory', () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 500 });
 
     await expect(searchPlacesByCategory(FARMACIA, { lat: -15.8, lng: -47.9 })).rejects.toThrow(
+      GeoapifyRequestError,
+    );
+  });
+});
+
+describe('searchPlaces', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('converte features da Geoapify em PlaceSuggestion, usando o endereço formatado como rótulo', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            properties: {
+              name: 'Bradesco',
+              formatted: 'Bradesco, C6 7, Setor Central, Taguatinga - DF, 72010-060, Brasil',
+              lat: -15.8335435,
+              lon: -48.0549342,
+              place_id: 'place-bradesco',
+            },
+          },
+        ],
+      }),
+    });
+
+    const results = await searchPlaces('Bradesco', { lat: -15.8, lng: -47.9 });
+
+    expect(results).toEqual([
+      {
+        id: 'place-bradesco',
+        placeName: 'Bradesco, C6 7, Setor Central, Taguatinga - DF, 72010-060, Brasil',
+        coordinates: { lat: -15.8335435, lng: -48.0549342 },
+      },
+    ]);
+  });
+
+  it('descarta features sem endereço formatado', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [{ properties: { lat: -15.8, lon: -47.9, place_id: 'place-1' } }],
+      }),
+    });
+
+    const results = await searchPlaces('Bradesco', { lat: -15.8, lng: -47.9 });
+
+    expect(results).toEqual([]);
+  });
+
+  it('não restringe por raio, só por país (Brasil) e viés de proximidade', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('Águas Claras', { lat: -15.8, lng: -47.9 });
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).not.toContain('circle');
+    expect(url).toContain('filter=countrycode%3Abr');
+    expect(url).toContain('bias=proximity%3A-47.9%2C-15.8');
+  });
+
+  it('usa um centro padrão (DF) quando nenhuma localização é informada', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('farmácia', null);
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('bias=proximity%3A-47.8828%2C-15.7939');
+  });
+
+  it('inclui o texto buscado e limita a 8 resultados na própria requisição', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchPlaces('Panificadora Bonanza', { lat: -15.8, lng: -47.9 });
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('text=Panificadora+Bonanza');
+    expect(url).toContain('limit=8');
+  });
+
+  it('lança GeoapifyRequestError quando a resposta não é ok', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(searchPlaces('Bradesco', { lat: -15.8, lng: -47.9 })).rejects.toThrow(
       GeoapifyRequestError,
     );
   });

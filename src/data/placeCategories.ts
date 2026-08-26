@@ -29,7 +29,19 @@ export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
     categoryLabel: 'Padaria',
   },
   { keywords: ['acougue'], geoapifyCategory: 'commercial.food_and_drink.butcher', categoryLabel: 'Açougue' },
-  { keywords: ['banco'], geoapifyCategory: 'service.financial.bank', categoryLabel: 'Banco' },
+  {
+    // Além da palavra genérica "banco", inclui marcas de bancos conhecidas
+    // no Brasil: sozinhas (ex.: "bradesco", sem a cidade junto), a busca por
+    // texto às vezes não acha a agência de verdade — confirmado testando
+    // "bradesco" diretamente na API, que retornou um bairro de mesmo nome no
+    // Pará em vez da agência no DF. Com a marca reconhecida como categoria,
+    // a busca por proximidade (que não depende do nome bater) garante uma
+    // agência bancária real e próxima como resultado, mesmo quando a busca
+    // por texto erra o alvo.
+    keywords: ['banco', 'bradesco', 'itau', 'santander', 'caixa economica', 'banco do brasil'],
+    geoapifyCategory: 'service.financial.bank',
+    categoryLabel: 'Banco',
+  },
   { keywords: ['caixa eletronico'], geoapifyCategory: 'service.financial.atm', categoryLabel: 'Caixa eletrônico' },
   {
     keywords: ['posto de gasolina', 'posto de combustivel'],
