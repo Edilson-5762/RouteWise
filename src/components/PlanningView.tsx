@@ -91,8 +91,18 @@ export function PlanningView({
   };
 
   return (
-    <div className="relative flex h-screen flex-col">
-      <header ref={setHeaderNode} className="z-10 space-y-3 bg-surface p-4 shadow">
+    // pointer-events-none na raiz (não só no vão vazio do meio, ver comentário
+    // abaixo): sem isso, esta div — que cobre a tela inteira (h-screen) por
+    // ser o container flex de tudo — continuava capturando cliques/arrasto em
+    // QUALQUER altura da tela, mesmo onde não há nada visível por cima do
+    // mapa, porque `pointer-events: none` num filho não repassa para o pai
+    // que o envolve. O cabeçalho e o cartão de destino, que são realmente
+    // clicáveis, precisam reativar pointer-events-auto para si.
+    <div className="relative flex h-screen flex-col pointer-events-none">
+      <header
+        ref={setHeaderNode}
+        className="pointer-events-auto z-10 space-y-3 bg-surface p-4 shadow"
+      >
         {!hasMapboxToken() && (
           <p className="rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning">
             Token do Mapbox não configurado. Defina <code>VITE_MAPBOX_TOKEN</code> no arquivo{' '}
@@ -152,14 +162,15 @@ export function PlanningView({
       </header>
 
       {/* Espaço vazio: o mapa em si é uma camada de fundo fixa e persistente
-          renderizada por App.tsx (ver comentário lá). pointer-events-none
-          deixa gestos de pan/zoom passarem direto para o mapa por baixo. */}
-      <div className="flex-1 pointer-events-none" />
+          renderizada por App.tsx (ver comentário lá). A raiz acima já é
+          pointer-events-none, então esta div só existe para ocupar o espaço
+          no fluxo flex — não precisa mais desativar pointer-events sozinha. */}
+      <div className="flex-1" />
 
       {state.status === 'routePlanned' && state.route && placeName && (
         <div
           ref={setDestinationCardNode}
-          className="border-t border-surface-foreground/10 bg-surface p-4"
+          className="pointer-events-auto border-t border-surface-foreground/10 bg-surface p-4"
         >
           <DestinationCard
             placeName={placeName}

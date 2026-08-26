@@ -52,37 +52,49 @@ export function NavigationView({
     (remainingDistanceMeters / state.route.distanceMeters) * state.route.durationSeconds;
 
   return (
-    <div className="relative flex h-screen flex-col">
-      <ManeuverBanner step={currentStep} />
+    // pointer-events-none na raiz (não só no vão vazio do meio, ver comentário
+    // abaixo): sem isso, esta div — que cobre a tela inteira (h-screen) por
+    // ser o container flex de tudo — continuava capturando cliques/arrasto em
+    // QUALQUER altura da tela, mesmo onde não há nada visível por cima do
+    // mapa, porque `pointer-events: none` num filho não repassa para o pai
+    // que o envolve. Cada painel realmente clicável (banner de manobra,
+    // avisos, barra de status) precisa reativar pointer-events-auto para si.
+    <div className="relative flex h-screen flex-col pointer-events-none">
+      <div className="pointer-events-auto">
+        <ManeuverBanner step={currentStep} />
+      </div>
       {isRecalculating && (
         <p
           role="status"
-          className="absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-surface-foreground shadow-lg"
+          className="pointer-events-auto absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-surface-foreground shadow-lg"
         >
           Recalculando rota...
         </p>
       )}
       {!isRecalculating && routeError && (
-        <div className="absolute left-1/2 top-20 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
+        <div className="pointer-events-auto absolute left-1/2 top-20 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
           <ErrorBanner message={routeError} onRetry={onRetryRecalc} />
         </div>
       )}
 
       {/* Espaço vazio: o mapa em si é uma camada de fundo fixa e persistente
-          renderizada por App.tsx (ver comentário lá). pointer-events-none
-          deixa gestos de pan/zoom passarem direto para o mapa por baixo. */}
-      <div className="flex-1 pointer-events-none" />
+          renderizada por App.tsx (ver comentário lá). A raiz acima já é
+          pointer-events-none, então esta div só existe para ocupar o espaço
+          no fluxo flex — não precisa mais desativar pointer-events sozinha. */}
+      <div className="flex-1" />
 
-      <NavigationStatusBar
-        durationSeconds={remainingDurationSeconds}
-        distanceMeters={remainingDistanceMeters}
-        speedMetersPerSecond={speedMetersPerSecond}
-        isVoiceSupported={voice.isSupported}
-        isVoiceMuted={voice.isMuted}
-        onToggleVoice={voice.toggleMute}
-        onExit={onExit}
-        onExitApp={onExitApp}
-      />
+      <div className="pointer-events-auto">
+        <NavigationStatusBar
+          durationSeconds={remainingDurationSeconds}
+          distanceMeters={remainingDistanceMeters}
+          speedMetersPerSecond={speedMetersPerSecond}
+          isVoiceSupported={voice.isSupported}
+          isVoiceMuted={voice.isMuted}
+          onToggleVoice={voice.toggleMute}
+          onExit={onExit}
+          onExitApp={onExitApp}
+        />
+      </div>
     </div>
   );
 }

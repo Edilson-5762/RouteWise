@@ -13,7 +13,11 @@ vi.mock('mapbox-gl', () => {
       }
     });
     off = vi.fn();
-    once = vi.fn();
+    once = vi.fn((event: string, handler: () => void) => {
+      if (event === 'style.load') {
+        handler();
+      }
+    });
     remove = vi.fn();
     setCenter = vi.fn();
     getSource = vi.fn().mockReturnValue(undefined);
@@ -53,7 +57,7 @@ describe('MapView', () => {
       />,
     );
 
-    expect(screen.queryByLabelText('Centralizar no destino')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
   });
 
   it('mostra o botão de centralizar quando o usuário arrasta o mapa durante a navegação, e some ao clicar', () => {
@@ -75,15 +79,18 @@ describe('MapView', () => {
       movestartHandler?.({ originalEvent: { type: 'touchmove' } });
     });
 
-    const recenterButton = screen.getByLabelText('Centralizar no destino');
+    const recenterButton = screen.getByLabelText('Centralizar');
     expect(recenterButton).toBeInTheDocument();
 
     fireEvent.click(recenterButton);
 
-    expect(screen.queryByLabelText('Centralizar no destino')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
   });
 
-  it('não mostra o botão de centralizar fora do modo navegação', () => {
+  it('também mostra o botão de centralizar fora do modo navegação (prévia da rota), e some ao clicar', () => {
+    // À la Waze/Google Maps: arrastar o mapa enquanto se olha a prévia da
+    // rota (antes de "Iniciar navegação") também precisa oferecer um jeito
+    // de voltar ao enquadramento da rota inteira, não só durante a condução.
     movestartHandler = null;
     render(
       <MapView
@@ -98,10 +105,17 @@ describe('MapView', () => {
       />,
     );
 
+    expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
+
     act(() => {
       movestartHandler?.({ originalEvent: { type: 'touchmove' } });
     });
 
-    expect(screen.queryByLabelText('Centralizar no destino')).not.toBeInTheDocument();
+    const recenterButton = screen.getByLabelText('Centralizar');
+    expect(recenterButton).toBeInTheDocument();
+
+    fireEvent.click(recenterButton);
+
+    expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
   });
 });

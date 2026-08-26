@@ -43,16 +43,19 @@ export function MapView({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} data-testid="map-view" className="h-full w-full" />
-      {isNavigating && !isFollowingUser && (
+      {!isFollowingUser && (
         <button
           type="button"
           onClick={recenter}
-          aria-label="Centralizar no destino"
-          // bottom-20 (não bottom-4): o mapa agora é uma camada única de tela
-          // cheia em App.tsx (ver comentário lá), então este botão precisa
-          // subir o suficiente para não ficar embaixo da NavigationStatusBar
-          // fixa no rodapé da tela de navegação.
-          className="absolute bottom-20 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+          aria-label="Centralizar"
+          // Durante a navegação, bottom-20 fixo (não bottom-4) sobe o
+          // suficiente para não ficar embaixo da NavigationStatusBar fixa no
+          // rodapé. Fora da navegação não há barra fixa, mas há o cartão de
+          // destino, que muda de altura (ver `chromeInsets`) — usa essa altura
+          // real via style em vez de uma classe fixa, senão o botão nascia
+          // embaixo do cartão sempre que ele fosse alto o bastante.
+          className="absolute right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg"
+          style={isNavigating ? { bottom: '5rem' } : { bottom: (chromeInsets?.bottom ?? 0) + 16 }}
         >
           <LocateFixed size={22} aria-hidden="true" />
         </button>
