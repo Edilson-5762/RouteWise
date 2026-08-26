@@ -143,6 +143,7 @@ export function useMapboxMap({
   const speedBadgeRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(true);
+  const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
   // Lido (não como dependência) só no momento em que o marcador é criado —
   // igual ao restante deste hook, o efeito abaixo intencionalmente não
   // reage a mudanças de travelProfile após a criação; a troca de ícone em
@@ -204,12 +205,14 @@ export function useMapboxMap({
     mapRef.current.once('style.load', () => {
       styleReadyRef.current = true;
     });
+    setMapInstance(mapRef.current);
 
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
       originMarkerRef.current = null;
       destinationMarkerRef.current = null;
+      setMapInstance(null);
     };
   }, [containerRef]);
 
@@ -547,5 +550,5 @@ export function useMapboxMap({
     }
   }, [origin, headingDegrees, isNavigating]);
 
-  return { mapRef, isFollowingUser, recenter };
+  return { mapRef, mapInstance, isFollowingUser, recenter };
 }

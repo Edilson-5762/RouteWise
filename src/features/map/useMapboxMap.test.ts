@@ -756,6 +756,31 @@ describe('useMapboxMap', () => {
     expect(icon?.getAttribute('data-vehicle-avatar')).toBe('motorcycle');
   });
 
+  it('expõe a instância do mapa (mapInstance) depois de criada, para consumidores que precisam de um valor reativo', () => {
+    const containerRef = createRef<HTMLDivElement>();
+    Object.defineProperty(containerRef, 'current', {
+      value: document.createElement('div'),
+      writable: true,
+    });
+
+    const { result } = renderHook(() =>
+      useMapboxMap({
+        containerRef,
+        origin: null,
+        destination: null,
+        route: null,
+        isNavigating: false,
+        headingDegrees: null,
+        theme: 'light',
+        travelProfile: 'driving',
+        speedMetersPerSecond: null,
+      }),
+    );
+
+    expect(result.current.mapInstance).toBe(result.current.mapRef.current);
+    expect(result.current.mapInstance).not.toBeNull();
+  });
+
   it('atualiza o ícone do puck quando o modo de transporte selecionado muda', () => {
     markerElementBox.current = null;
     const containerRef = createRef<HTMLDivElement>();
