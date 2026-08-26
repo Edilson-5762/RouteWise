@@ -1,60 +1,84 @@
 import { normalize } from '../utils/text';
 
-// `value: ''` significa "a chave existe, com qualquer valor" — usado para
-// categorias genéricas do OSM que não têm um único valor de tag (ex.:
-// `shop` cobre desde "clothes" até "hairdresser"). Ver `overpassClient.ts`
-// para como isso vira um filtro Overpass sem `=valor`.
-export interface OsmTag {
-  key: string;
-  value: string;
-}
-
 export interface PlaceCategoryDefinition {
   keywords: string[];
-  osmTag: OsmTag;
+  geoapifyCategory: string;
   categoryLabel: string;
 }
 
 // Palavras-chave já normalizadas (sem acento, minúsculas) — comparadas com
-// `normalize(query)` em `matchPlaceCategory`. Cobre os tipos de
+// `normalize(query)` em `matchPlaceCategory`. Códigos de categoria conforme
+// a árvore hierárquica da Geoapify Places API (ver
+// https://apidocs.geoapify.com/docs/places/#categories). Cobre os tipos de
 // estabelecimento mais comuns em buscas de navegação no Brasil; não é uma
-// lista exaustiva de todas as tags do OSM.
+// lista exaustiva de todas as categorias da Geoapify.
 export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
-  { keywords: ['farmacia'], osmTag: { key: 'amenity', value: 'pharmacy' }, categoryLabel: 'Farmácia' },
-  { keywords: ['hospital'], osmTag: { key: 'amenity', value: 'hospital' }, categoryLabel: 'Hospital' },
-  { keywords: ['clinica'], osmTag: { key: 'amenity', value: 'clinic' }, categoryLabel: 'Clínica' },
-  { keywords: ['restaurante'], osmTag: { key: 'amenity', value: 'restaurant' }, categoryLabel: 'Restaurante' },
-  { keywords: ['lanchonete'], osmTag: { key: 'amenity', value: 'fast_food' }, categoryLabel: 'Lanchonete' },
-  { keywords: ['padaria'], osmTag: { key: 'shop', value: 'bakery' }, categoryLabel: 'Padaria' },
-  { keywords: ['banco'], osmTag: { key: 'amenity', value: 'bank' }, categoryLabel: 'Banco' },
-  { keywords: ['caixa eletronico'], osmTag: { key: 'amenity', value: 'atm' }, categoryLabel: 'Caixa eletrônico' },
+  { keywords: ['farmacia'], geoapifyCategory: 'commercial.health_and_beauty.pharmacy', categoryLabel: 'Farmácia' },
+  { keywords: ['hospital'], geoapifyCategory: 'healthcare.hospital', categoryLabel: 'Hospital' },
+  {
+    keywords: ['clinica', 'posto de saude'],
+    geoapifyCategory: 'healthcare.clinic_or_praxis',
+    categoryLabel: 'Clínica',
+  },
+  { keywords: ['restaurante'], geoapifyCategory: 'catering.restaurant', categoryLabel: 'Restaurante' },
+  { keywords: ['lanchonete'], geoapifyCategory: 'catering.fast_food', categoryLabel: 'Lanchonete' },
+  { keywords: ['bar'], geoapifyCategory: 'catering.bar', categoryLabel: 'Bar' },
+  {
+    keywords: ['padaria', 'panificadora'],
+    geoapifyCategory: 'commercial.food_and_drink.bakery',
+    categoryLabel: 'Padaria',
+  },
+  { keywords: ['acougue'], geoapifyCategory: 'commercial.food_and_drink.butcher', categoryLabel: 'Açougue' },
+  { keywords: ['banco'], geoapifyCategory: 'service.financial.bank', categoryLabel: 'Banco' },
+  { keywords: ['caixa eletronico'], geoapifyCategory: 'service.financial.atm', categoryLabel: 'Caixa eletrônico' },
   {
     keywords: ['posto de gasolina', 'posto de combustivel'],
-    osmTag: { key: 'amenity', value: 'fuel' },
+    geoapifyCategory: 'service.vehicle.fuel',
     categoryLabel: 'Posto de combustível',
   },
   {
     keywords: ['supermercado', 'mercado'],
-    osmTag: { key: 'shop', value: 'supermarket' },
+    geoapifyCategory: 'commercial.supermarket',
     categoryLabel: 'Supermercado',
   },
-  { keywords: ['shopping'], osmTag: { key: 'shop', value: 'mall' }, categoryLabel: 'Shopping' },
-  { keywords: ['escola'], osmTag: { key: 'amenity', value: 'school' }, categoryLabel: 'Escola' },
-  { keywords: ['academia'], osmTag: { key: 'leisure', value: 'fitness_centre' }, categoryLabel: 'Academia' },
-  { keywords: ['hotel'], osmTag: { key: 'tourism', value: 'hotel' }, categoryLabel: 'Hotel' },
-  { keywords: ['pousada'], osmTag: { key: 'tourism', value: 'guest_house' }, categoryLabel: 'Pousada' },
-  { keywords: ['delegacia'], osmTag: { key: 'amenity', value: 'police' }, categoryLabel: 'Delegacia' },
-  { keywords: ['correios'], osmTag: { key: 'amenity', value: 'post_office' }, categoryLabel: 'Correios' },
-  { keywords: ['cinema'], osmTag: { key: 'amenity', value: 'cinema' }, categoryLabel: 'Cinema' },
-  { keywords: ['parque'], osmTag: { key: 'leisure', value: 'park' }, categoryLabel: 'Parque' },
-  { keywords: ['loja', 'comercio'], osmTag: { key: 'shop', value: '' }, categoryLabel: 'Loja' },
+  { keywords: ['shopping'], geoapifyCategory: 'commercial.shopping_mall', categoryLabel: 'Shopping' },
+  { keywords: ['escola'], geoapifyCategory: 'education.school', categoryLabel: 'Escola' },
+  { keywords: ['academia'], geoapifyCategory: 'sport.fitness.gym', categoryLabel: 'Academia' },
+  { keywords: ['hotel'], geoapifyCategory: 'accommodation.hotel', categoryLabel: 'Hotel' },
+  { keywords: ['pousada'], geoapifyCategory: 'accommodation.guest_house', categoryLabel: 'Pousada' },
+  { keywords: ['delegacia'], geoapifyCategory: 'service.police', categoryLabel: 'Delegacia' },
+  { keywords: ['correios'], geoapifyCategory: 'service.post.office', categoryLabel: 'Correios' },
+  { keywords: ['cinema'], geoapifyCategory: 'entertainment.cinema', categoryLabel: 'Cinema' },
+  { keywords: ['parque'], geoapifyCategory: 'leisure.park', categoryLabel: 'Parque' },
+  { keywords: ['barbearia'], geoapifyCategory: 'service.beauty.hairdresser', categoryLabel: 'Barbearia' },
+  {
+    keywords: ['salao de estetica', 'salao de beleza'],
+    geoapifyCategory: 'service.beauty.spa',
+    categoryLabel: 'Salão de beleza',
+  },
+  { keywords: ['orgao publico'], geoapifyCategory: 'office.government', categoryLabel: 'Órgão público' },
+  // Categoria genérica: cobre qualquer estabelecimento comercial não listado
+  // acima (a Geoapify aceita a categoria de nível superior "commercial" como
+  // guarda-chuva de todas as suas subcategorias).
+  { keywords: ['loja', 'comercio'], geoapifyCategory: 'commercial', categoryLabel: 'Loja' },
 ];
 
+// Usa a palavra-chave mais longa (mais específica) entre todas as
+// correspondências, não a primeira encontrada na lista — sem isso, uma
+// palavra-chave curta que também é substring de outra mais específica (ex.:
+// "bar" dentro de "barbearia") vence indevidamente dependendo só da ordem em
+// que as categorias foram declaradas.
 export function matchPlaceCategory(query: string): PlaceCategoryDefinition | null {
   const normalizedQuery = normalize(query);
-  return (
-    PLACE_CATEGORIES.find((category) =>
-      category.keywords.some((keyword) => normalizedQuery.includes(keyword)),
-    ) ?? null
-  );
+  let best: { category: PlaceCategoryDefinition; keywordLength: number } | null = null;
+
+  for (const category of PLACE_CATEGORIES) {
+    for (const keyword of category.keywords) {
+      if (normalizedQuery.includes(keyword) && (!best || keyword.length > best.keywordLength)) {
+        best = { category, keywordLength: keyword.length };
+      }
+    }
+  }
+
+  return best?.category ?? null;
 }

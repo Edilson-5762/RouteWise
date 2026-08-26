@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSearchSessionToken, retrievePlace, searchPlaces } from '../../services/mapboxClient';
 import { matchPlaceCategory } from '../../data/placeCategories';
-import { searchPlacesByCategory } from '../../services/overpassClient';
+import { searchPlacesByCategory } from '../../services/geoapifyClient';
 import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;

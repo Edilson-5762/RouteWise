@@ -5,7 +5,7 @@ describe('matchPlaceCategory', () => {
   it('reconhece "farmácia" (com acento) como categoria Farmácia', () => {
     const category = matchPlaceCategory('farmácia');
     expect(category?.categoryLabel).toBe('Farmácia');
-    expect(category?.osmTag).toEqual({ key: 'amenity', value: 'pharmacy' });
+    expect(category?.geoapifyCategory).toBe('commercial.health_and_beauty.pharmacy');
   });
 
   it('reconhece a categoria mesmo com texto adicional na busca', () => {
@@ -22,7 +22,24 @@ describe('matchPlaceCategory', () => {
     expect(matchPlaceCategory('Águas Claras')).toBeNull();
   });
 
-  it('usa o filtro de existência de chave (sem valor) para "loja"', () => {
-    expect(matchPlaceCategory('loja')?.osmTag).toEqual({ key: 'shop', value: '' });
+  it('usa a categoria genérica "commercial" para "loja"', () => {
+    expect(matchPlaceCategory('loja')?.geoapifyCategory).toBe('commercial');
+  });
+
+  it('prefere a palavra-chave mais específica quando uma é substring da outra ("bar" dentro de "barbearia")', () => {
+    expect(matchPlaceCategory('bar')?.categoryLabel).toBe('Bar');
+    expect(matchPlaceCategory('barbearia')?.categoryLabel).toBe('Barbearia');
+    expect(matchPlaceCategory('quero ir num bar hoje')?.categoryLabel).toBe('Bar');
+  });
+
+  it('reconhece categorias adicionadas após o relato de cobertura incompleta', () => {
+    expect(matchPlaceCategory('bar')?.categoryLabel).toBe('Bar');
+    expect(matchPlaceCategory('barbearia')?.categoryLabel).toBe('Barbearia');
+    expect(matchPlaceCategory('salão de estética')?.categoryLabel).toBe('Salão de beleza');
+    expect(matchPlaceCategory('salão de beleza')?.categoryLabel).toBe('Salão de beleza');
+    expect(matchPlaceCategory('açougue')?.categoryLabel).toBe('Açougue');
+    expect(matchPlaceCategory('panificadora')?.categoryLabel).toBe('Padaria');
+    expect(matchPlaceCategory('posto de saúde')?.categoryLabel).toBe('Clínica');
+    expect(matchPlaceCategory('órgão público')?.categoryLabel).toBe('Órgão público');
   });
 });

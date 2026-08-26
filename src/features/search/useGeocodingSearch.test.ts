@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useGeocodingSearch } from './useGeocodingSearch';
 import * as mapboxClient from '../../services/mapboxClient';
-import * as overpassClient from '../../services/overpassClient';
+import * as geoapifyClient from '../../services/geoapifyClient';
 
 describe('useGeocodingSearch', () => {
   beforeEach(() => {
@@ -74,9 +74,9 @@ describe('useGeocodingSearch', () => {
     );
   });
 
-  it('usa a Overpass API quando a query corresponde a uma categoria de estabelecimento', async () => {
-    const overpassSpy = vi.spyOn(overpassClient, 'searchPlacesByCategory').mockResolvedValue([
-      { id: 'osm-node-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.8, lng: -47.9 } },
+  it('usa a Geoapify quando a query corresponde a uma categoria de estabelecimento', async () => {
+    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([
+      { id: 'place-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.8, lng: -47.9 } },
     ]);
     const mapboxSpy = vi.spyOn(mapboxClient, 'searchPlaces');
 
@@ -86,13 +86,13 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(overpassSpy).toHaveBeenCalled();
+    expect(geoapifySpy).toHaveBeenCalled();
     expect(mapboxSpy).not.toHaveBeenCalled();
     expect(result.current.suggestions).toHaveLength(1);
   });
 
   it('repassa a localização atual para searchPlacesByCategory como centro de busca', async () => {
-    const overpassSpy = vi.spyOn(overpassClient, 'searchPlacesByCategory').mockResolvedValue([]);
+    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([]);
 
     renderHook(() => useGeocodingSearch('farmácia', { lat: -15.8, lng: -47.9 }));
 
@@ -100,14 +100,14 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(overpassSpy).toHaveBeenCalledWith(
+    expect(geoapifySpy).toHaveBeenCalledWith(
       expect.objectContaining({ categoryLabel: 'Farmácia' }),
       { lat: -15.8, lng: -47.9 },
     );
   });
 
-  it('usa o Mapbox (não a Overpass) para queries que não correspondem a nenhuma categoria', async () => {
-    const overpassSpy = vi.spyOn(overpassClient, 'searchPlacesByCategory');
+  it('usa o Mapbox (não a Geoapify) para queries que não correspondem a nenhuma categoria', async () => {
+    const geoapifySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory');
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([]);
 
     renderHook(() => useGeocodingSearch('Avenida Paulista'));
@@ -116,7 +116,7 @@ describe('useGeocodingSearch', () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
-    expect(overpassSpy).not.toHaveBeenCalled();
+    expect(geoapifySpy).not.toHaveBeenCalled();
   });
 
   it('resolveSuggestion usa coordenadas já conhecidas (gazetteer local) sem chamar retrievePlace', async () => {
