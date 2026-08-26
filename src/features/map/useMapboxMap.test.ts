@@ -33,7 +33,16 @@ vi.mock('mapbox-gl', () => {
       }
     });
     off = vi.fn();
-    once = vi.fn();
+    // Invoca o callback de 'style.load' na hora (síncrono): o hook usa esse
+    // evento só para saber quando um `setStyle` em andamento termina — nestes
+    // testes o estilo nunca está realmente "em troca", então o callback deve
+    // rodar imediatamente, do jeito que `isStyleLoaded: () => true` fazia
+    // antes de o hook passar a rastrear isso por conta própria.
+    once = vi.fn((event: string, handler: () => void) => {
+      if (event === 'style.load') {
+        handler();
+      }
+    });
     remove = vi.fn();
     setCenter = vi.fn();
     private sourceIds = new Set<string>();

@@ -156,6 +156,26 @@ export function useMapboxMap({
   // reajustar fitBounds/layers a cada tick de GPS.
   const originRef = useRef(origin);
   originRef.current = origin;
+  const skipInitialStyleEffectRef = useRef(true);
+  // Rastreia se o *estilo em si* (a folha de estilo carregada via
+  // construtor/setStyle) já terminou de carregar — ao contrário de
+  // `map.isStyleLoaded()`, que também retorna `false` enquanto qualquer
+  // source (inclusive a nossa source de rota, um GeoJSON comum) ainda está
+  // processando seus dados. Usar `isStyleLoaded()` como sinal de "posso
+  // desenhar a rota agora" fazia o efeito de rota, ao rodar de novo logo
+  // depois de adicionar a própria source (ex.: quando o padding do
+  // fitBounds é recalculado com a altura real do cartão de destino), cair
+  // no branch de "esperar `style.load`" — evento que não viria de novo
+  // (não houve troca de estilo nenhuma), perdendo esse fitBounds corrigido
+  // para sempre e deixando a câmera presa no enquadramento errado do
+  // primeiro fitBounds (sem a altura do cartão).
+  const styleReadyRef = useRef(false);
+  // Último enquadramento (bounds + padding) calculado pelo efeito de rota,
+  // para o botão "Centralizar" poder reaplicá-lo sem recalcular nada.
+  const lastRouteFitRef = useRef<{
+    bounds: mapboxgl.LngLatBounds;
+    padding: { top: number; bottom: number; left: number; right: number };
+  } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -174,6 +194,15 @@ export function useMapboxMap({
       zoom: isNavigating ? 17 : 12,
       pitch: isNavigating ? 60 : 0,
       bearing: isNavigating && headingDegrees != null ? headingDegrees : 0,
+    });
+    // A instância acima já nasce com o estilo correto — marca a próxima
+    // rodada do efeito de tema (abaixo) para pular a chamada de setStyle
+    // dela, evitando um reload de estilo redundante logo no mount desta
+    // instância (ver comentário nesse efeito).
+    skipInitialStyleEffectRef.current = true;
+    styleReadyRef.current = false;
+    mapRef.current.once('style.load', () => {
+      styleReadyRef.current = true;
     });
 
     return () => {
@@ -314,16 +343,28 @@ export function useMapboxMap({
   // Runs before the route effect below (hook declaration order — both depend on
   // `theme`, and effects fire in the order they're declared within a commit) so
   // that when theme changes, setStyle() has already been called by the time the
-  // route effect checks isStyleLoaded(). That ordering is what makes the route
+  // route effect checks `styleReadyRef`. That ordering is what makes the route
   // effect correctly see the style as "not loaded" and register a 'style.load'
   // listener instead of racing to redraw onto the style that's about to be torn
   // down by setStyle.
+  //
+  // Pula a primeira rodada deste efeito (logo no mount): a instância criada no
+  // efeito acima já nasce com o estilo certo, então chamar `setStyle` de novo
+  // aqui seria um reload redundante do mesmo estilo.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) {
       return;
     }
+    if (skipInitialStyleEffectRef.current) {
+      skipInitialStyleEffectRef.current = false;
+      return;
+    }
+    styleReadyRef.current = false;
     map.setStyle(theme === 'dark' ? NIGHT_STYLE : DAY_STYLE);
+    map.once('style.load', () => {
+      styleReadyRef.current = true;
+    });
   }, [theme]);
 
   useEffect(() => {
@@ -333,6 +374,7 @@ export function useMapboxMap({
     }
 
     if (!route) {
+      lastRouteFitRef.current = null;
       const clearRoute = () => {
         if (map.getSource(ROUTE_SOURCE_ID)) {
           if (map.getLayer(ROUTE_LAYER_ID)) {
@@ -345,7 +387,7 @@ export function useMapboxMap({
         }
       };
 
-      if (map.isStyleLoaded()) {
+      if (styleReadyRef.current) {
         clearRoute();
       } else {
         map.once('style.load', clearRoute);
@@ -402,18 +444,22 @@ export function useMapboxMap({
         // do cabeçalho/cartão de destino (ver `chromeInsets`, medidos em
         // PlanningView) para que a rota inteira caiba no vão livre entre
         // eles, em vez de nascer/terminar atrás desses painéis.
-        map.fitBounds(bounds, {
-          padding: {
-            top: chromeInsets.top + FIT_BOUNDS_BREATHING_ROOM_PX,
-            bottom: chromeInsets.bottom + FIT_BOUNDS_BREATHING_ROOM_PX,
-            left: FIT_BOUNDS_BREATHING_ROOM_PX,
-            right: FIT_BOUNDS_BREATHING_ROOM_PX,
-          },
-        });
+        const padding = {
+          top: chromeInsets.top + FIT_BOUNDS_BREATHING_ROOM_PX,
+          bottom: chromeInsets.bottom + FIT_BOUNDS_BREATHING_ROOM_PX,
+          left: FIT_BOUNDS_BREATHING_ROOM_PX,
+          right: FIT_BOUNDS_BREATHING_ROOM_PX,
+        };
+        // Guardado para o botão "Centralizar" (recenter, abaixo) poder
+        // reenquadrar a rota inteira de novo depois que o usuário arrasta o
+        // mapa durante o planejamento, em vez de só saber centralizar num
+        // ponto — à la Waze/Google Maps.
+        lastRouteFitRef.current = { bounds, padding };
+        map.fitBounds(bounds, { padding });
       }
     };
 
-    if (map.isStyleLoaded()) {
+    if (styleReadyRef.current) {
       applyRoute();
     } else {
       map.once('style.load', applyRoute);
@@ -463,20 +509,43 @@ export function useMapboxMap({
     }
   }, [origin, isNavigating, headingDegrees, isFollowingUser]);
 
+  // Fora da navegação (planejamento), recentralizar volta a mostrar a rota
+  // inteira (o mesmo enquadramento do fitBounds), não um zoom de perto no
+  // usuário — à la Waze/Google Maps, onde o botão de centralizar durante a
+  // prévia da rota reenquadra o trajeto, e só passa a seguir de perto o
+  // usuário depois que a navegação começa de fato.
   const recenter = useCallback(() => {
     setIsFollowingUser(true);
     const map = mapRef.current;
-    if (!map || !origin) {
+    if (!map) {
       return;
     }
-    map.easeTo({
-      center: [origin.lng, origin.lat],
-      zoom: 17,
-      pitch: 60,
-      bearing: headingDegrees ?? map.getBearing(),
-      duration: 500,
-    });
-  }, [origin, headingDegrees]);
+
+    if (isNavigating) {
+      if (!origin) {
+        return;
+      }
+      map.easeTo({
+        center: [origin.lng, origin.lat],
+        zoom: 17,
+        pitch: 60,
+        bearing: headingDegrees ?? map.getBearing(),
+        duration: 500,
+      });
+      return;
+    }
+
+    if (lastRouteFitRef.current) {
+      map.fitBounds(lastRouteFitRef.current.bounds, {
+        padding: lastRouteFitRef.current.padding,
+      });
+      return;
+    }
+
+    if (origin) {
+      map.easeTo({ center: [origin.lng, origin.lat], pitch: 0, bearing: 0, duration: 500 });
+    }
+  }, [origin, headingDegrees, isNavigating]);
 
   return { mapRef, isFollowingUser, recenter };
 }
