@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { searchNearbyPlaces } from '../../services/geoapifyClient';
+import { searchNearbyPlaces, GeoapifyRequestError } from '../../services/geoapifyClient';
 import { haversineDistanceMeters } from '../../utils/distance';
 import type { Coordinates, GeocodingSuggestion } from '../../types';
 
@@ -8,6 +8,7 @@ const MIN_ZOOM = 16;
 const MIN_MOVE_METERS = 400;
 const SEARCH_RADIUS_METERS = 900;
 const DEBOUNCE_MS = 400;
+const RATE_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
 
 interface UseNearbyPlacesMarkersOptions {
   map: mapboxgl.Map | null;
@@ -67,6 +68,7 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
   const lastFetchCenterRef = useRef<Coordinates | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSelectRef = useRef(onSelect);
+  const rateLimitedUntilRef = useRef(0);
   onSelectRef.current = onSelect;
 
   useEffect(() => {
@@ -95,6 +97,10 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         return;
       }
 
+      if (Date.now() < rateLimitedUntilRef.current) {
+        return;
+      }
+
       const last = lastFetchCenterRef.current;
       if (last && haversineDistanceMeters(last, center) < MIN_MOVE_METERS) {
         return;
@@ -111,7 +117,10 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         results = suggestions.filter(
           (place): place is GeocodingSuggestion => place.coordinates !== undefined,
         );
-      } catch {
+      } catch (error) {
+        if (error instanceof GeoapifyRequestError && error.status === 429) {
+          rateLimitedUntilRef.current = Date.now() + RATE_LIMIT_BACKOFF_MS;
+        }
         // Falha silenciosa de propósito (ver spec): esta é uma camada de
         // enriquecimento visual, não um caminho crítico. A próxima busca
         // válida tenta de novo naturalmente.

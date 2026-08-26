@@ -286,4 +286,34 @@ describe('useNearbyPlacesMarkers', () => {
     expect(searchSpy).toHaveBeenCalledTimes(1); // A busca foi disparada novamente
     expect(addToMock).toHaveBeenCalledTimes(1); // Marcador foi criado
   });
+
+  it('para de buscar por 5 minutos depois de um 429, mesmo com o centro se movendo o bastante', async () => {
+    const spy = vi
+      .spyOn(geoapifyClient, 'searchNearbyPlaces')
+      .mockRejectedValueOnce(new geoapifyClient.GeoapifyRequestError('rate limited', 429));
+    const map = createFakeMap(BASE_CENTER, 16);
+
+    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    spy.mockResolvedValueOnce([]);
+
+    await act(async () => {
+      map.__simulateMoveEnd(FAR_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
 });
