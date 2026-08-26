@@ -69,6 +69,7 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSelectRef = useRef(onSelect);
   const rateLimitedUntilRef = useRef(0);
+  const fetchSeqRef = useRef(0);
   onSelectRef.current = onSelect;
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         marker.remove();
       }
       markersRef.current = [];
+      lastFetchCenterRef.current = null;
     };
 
     if (!map || !enabled) {
@@ -92,7 +94,6 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
       const zoom = map.getZoom();
 
       if (zoom < MIN_ZOOM) {
-        lastFetchCenterRef.current = null;
         clearMarkers();
         return;
       }
@@ -106,11 +107,13 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         return;
       }
 
+      const fetchSeq = ++fetchSeqRef.current;
+
       let results: GeocodingSuggestion[];
       try {
         const suggestions = await searchNearbyPlaces(center, SEARCH_RADIUS_METERS);
 
-        if (isCancelled) {
+        if (isCancelled || fetchSeq !== fetchSeqRef.current) {
           return;
         }
 
@@ -124,15 +127,11 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         // Falha silenciosa de propósito (ver spec): esta é uma camada de
         // enriquecimento visual, não um caminho crítico. A próxima busca
         // válida tenta de novo naturalmente.
-        if (isCancelled) {
-          return;
-        }
         return;
       }
 
-      lastFetchCenterRef.current = center;
-
       clearMarkers();
+      lastFetchCenterRef.current = center;
       markersRef.current = results.map((place) => {
         const element = createMarkerElement(place);
         element.addEventListener('click', (event) => {

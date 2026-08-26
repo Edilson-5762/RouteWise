@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useNearbyPlacesMarkers } from './useNearbyPlacesMarkers';
 import * as geoapifyClient from '../../services/geoapifyClient';
-import type { Coordinates } from '../../types';
+import type { Coordinates, GeocodingSuggestion } from '../../types';
 
 const setLngLatMock = vi.fn().mockReturnThis();
 const addToMock = vi.fn().mockReturnThis();
@@ -315,5 +315,77 @@ describe('useNearbyPlacesMarkers', () => {
       await vi.advanceTimersByTimeAsync(400);
     });
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('reseta o gate de distância ao limpar os marcadores, permitindo rebuscar no mesmo lugar após um ciclo de desabilitar/habilitar', async () => {
+    const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
+    const map = createFakeMap(BASE_CENTER, 16);
+
+    const { rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useNearbyPlacesMarkers({ map: map as never, enabled, onSelect: vi.fn() }),
+      { initialProps: { enabled: true } },
+    );
+
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignora o resultado de uma busca mais antiga que resolve depois de uma busca mais nova, para não sobrescrever marcadores corretos com dados desatualizados', async () => {
+    let resolveFirst!: (value: GeocodingSuggestion[]) => void;
+    let resolveSecond!: (value: GeocodingSuggestion[]) => void;
+    const firstPromise = new Promise<GeocodingSuggestion[]>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondPromise = new Promise<GeocodingSuggestion[]>((resolve) => {
+      resolveSecond = resolve;
+    });
+
+    vi.spyOn(geoapifyClient, 'searchNearbyPlaces')
+      .mockReturnValueOnce(firstPromise)
+      .mockReturnValueOnce(secondPromise);
+
+    const map = createFakeMap(BASE_CENTER, 16);
+    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    await act(async () => {
+      map.__simulateMoveEnd(FAR_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    // A busca mais nova (FAR_CENTER) resolve primeiro.
+    await act(async () => {
+      resolveSecond([{ id: 'far', placeName: 'Mercado Far', coordinates: FAR_CENTER }]);
+    });
+    expect(addToMock).toHaveBeenCalledTimes(1);
+    expect(markerElements).toHaveLength(1);
+    expect(markerElements[0].textContent).toContain('Mercado Far');
+
+    // Só depois, a busca antiga (BASE_CENTER) resolve.
+    await act(async () => {
+      resolveFirst([{ id: 'base', placeName: 'Loja Base', coordinates: BASE_CENTER }]);
+    });
+
+    // O resultado desatualizado não deve mexer nos marcadores corretos.
+    expect(removeMock).not.toHaveBeenCalled();
+    expect(addToMock).toHaveBeenCalledTimes(1);
+    expect(markerElements[0].textContent).toContain('Mercado Far');
   });
 });
