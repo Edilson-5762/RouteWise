@@ -1,4 +1,3 @@
-import { MapView } from './MapView';
 import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
@@ -10,26 +9,24 @@ interface NavigationViewProps {
   state: NavigationState;
   placeName: string | null;
   speedMetersPerSecond: number | null;
-  headingDegrees: number | null;
-  theme: 'light' | 'dark';
   isRecalculating: boolean;
   routeError: string | null;
   onRetryRecalc: () => void;
   onExit: () => void;
   onArrivalDone: () => void;
+  onExitApp: () => void;
 }
 
 export function NavigationView({
   state,
   placeName,
   speedMetersPerSecond,
-  headingDegrees,
-  theme,
   isRecalculating,
   routeError,
   onRetryRecalc,
   onExit,
   onArrivalDone,
+  onExitApp,
 }: NavigationViewProps) {
   const currentStep = state.route?.steps[state.currentStepIndex] ?? null;
   const voice = useVoiceGuidance(currentStep?.instruction ?? null, {
@@ -71,16 +68,10 @@ export function NavigationView({
         </div>
       )}
 
-      <div className="relative flex-1">
-        <MapView
-          origin={state.origin}
-          destination={state.destination}
-          route={state.route}
-          isNavigating
-          headingDegrees={headingDegrees}
-          theme={theme}
-        />
-      </div>
+      {/* Espaço vazio: o mapa em si é uma camada de fundo fixa e persistente
+          renderizada por App.tsx (ver comentário lá). pointer-events-none
+          deixa gestos de pan/zoom passarem direto para o mapa por baixo. */}
+      <div className="flex-1 pointer-events-none" />
 
       <NavigationStatusBar
         durationSeconds={remainingDurationSeconds}
@@ -90,6 +81,7 @@ export function NavigationView({
         isVoiceMuted={voice.isMuted}
         onToggleVoice={voice.toggleMute}
         onExit={onExit}
+        onExitApp={onExitApp}
       />
     </div>
   );

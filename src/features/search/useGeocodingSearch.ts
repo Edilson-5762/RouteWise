@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { searchPlaces } from '../../services/mapboxClient';
-import type { Coordinates, GeocodingSuggestion } from '../../types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createSearchSessionToken, retrievePlace, searchPlaces } from '../../services/mapboxClient';
+import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 
 export function useGeocodingSearch(query: string, proximity?: Coordinates | null) {
-  const [suggestions, setSuggestions] = useState<GeocodingSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionTokenRef = useRef(createSearchSessionToken());
 
   useEffect(() => {
     if (query.trim().length < MIN_QUERY_LENGTH) {
@@ -21,7 +22,7 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
     setIsLoading(true);
 
     const timeoutId = setTimeout(() => {
-      searchPlaces(query, proximity)
+      searchPlaces(query, sessionTokenRef.current, proximity)
         .then((results) => {
           if (!isCancelled) {
             setSuggestions(results);
@@ -45,7 +46,22 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
       isCancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [query]);
+  }, [query, proximity]);
 
-  return { suggestions, isLoading, error };
+  // Busca as coordenadas da sugestão escolhida (segunda etapa da Search Box
+  // API) e encerra a sessão de busca atual — a próxima digitação usa um novo
+  // token, como a Mapbox recomenda.
+  const resolveSuggestion = useCallback(
+    async (suggestion: PlaceSuggestion): Promise<GeocodingSuggestion> => {
+      if (suggestion.coordinates) {
+        return { id: suggestion.id, placeName: suggestion.placeName, coordinates: suggestion.coordinates };
+      }
+      const coordinates = await retrievePlace(suggestion.id, sessionTokenRef.current);
+      sessionTokenRef.current = createSearchSessionToken();
+      return { id: suggestion.id, placeName: suggestion.placeName, coordinates };
+    },
+    [],
+  );
+
+  return { suggestions, isLoading, error, resolveSuggestion };
 }

@@ -52,7 +52,15 @@ export function navigationReducer(
       if (state.status !== 'routePlanned' || !state.route) {
         return state;
       }
-      return { ...state, status: 'navigating' };
+      // `state.route` foi calculado a partir do fix de GPS de quando o
+      // destino foi escolhido, que já pode estar um pouco desatualizado
+      // (usuário se moveu enquanto olhava o cartão de destino, ou o fix
+      // inicial tinha imprecisão) — sem isso a seta e a linha nasciam um
+      // pouco à frente/atrás do veículo em vez de exatamente na posição
+      // atual. Forçar routeDeviated aqui reaproveita o mecanismo de
+      // recálculo por desvio (já testado) para buscar uma rota fresca a
+      // partir da posição atual assim que a navegação começa.
+      return { ...state, status: 'navigating', routeDeviated: true };
 
     case 'POSITION_UPDATED': {
       if (state.status !== 'navigating' || !state.route) {
@@ -84,7 +92,15 @@ export function navigationReducer(
     }
 
     case 'RESET':
-      return initialNavigationState;
+      // Mantém `origin` (posição de GPS já conhecida) em vez de zerá-la: o
+      // efeito em App.tsx que repõe `origin` a partir do GPS só reage a uma
+      // MUDANÇA de referência em `geolocation.position`, e essa referência
+      // fica parada enquanto o dispositivo não se move (deadband de ruído em
+      // useGeolocation). Zerar `origin` aqui a deixava presa em `null` até o
+      // próximo movimento real — sem origem, o efeito que dispara
+      // `planRoute` nunca roda, então escolher um novo destino após sair da
+      // navegação não fazia nada.
+      return { ...initialNavigationState, origin: state.origin };
 
     default:
       return state;

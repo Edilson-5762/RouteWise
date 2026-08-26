@@ -13,6 +13,7 @@ describe('NavigationStatusBar', () => {
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
         onExit={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -31,6 +32,7 @@ describe('NavigationStatusBar', () => {
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
         onExit={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -48,12 +50,33 @@ describe('NavigationStatusBar', () => {
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
         onExit={onExit}
+        onExitApp={vi.fn()}
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Sair da navegação' }));
 
     expect(onExit).toHaveBeenCalled();
+  });
+
+  it('chama onExitApp ao clicar em sair da página', () => {
+    const onExitApp = vi.fn();
+    render(
+      <NavigationStatusBar
+        durationSeconds={780}
+        distanceMeters={6300}
+        speedMetersPerSecond={null}
+        isVoiceSupported
+        isVoiceMuted={false}
+        onToggleVoice={vi.fn()}
+        onExit={vi.fn()}
+        onExitApp={onExitApp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sair da página' }));
+
+    expect(onExitApp).toHaveBeenCalled();
   });
 
   it('não mostra o botão de voz quando não suportado', () => {
@@ -66,6 +89,7 @@ describe('NavigationStatusBar', () => {
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
         onExit={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 

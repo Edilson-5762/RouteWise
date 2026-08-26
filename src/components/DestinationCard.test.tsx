@@ -11,6 +11,7 @@ const baseProps = {
   onSave: vi.fn(),
   onShare: vi.fn(),
   onStartNavigation: vi.fn(),
+  onCancel: vi.fn(),
   isSaved: false,
 };
 
@@ -50,5 +51,14 @@ describe('DestinationCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'A pé' }));
 
     expect(onTravelProfileChange).toHaveBeenCalledWith('walking');
+  });
+
+  it('chama onCancel ao clicar em Cancelar trajeto', () => {
+    const onCancel = vi.fn();
+    render(<DestinationCard {...baseProps} onCancel={onCancel} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar trajeto' }));
+
+    expect(onCancel).toHaveBeenCalled();
   });
 });

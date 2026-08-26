@@ -1,12 +1,30 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useReducer, useRef, useState } from 'react';
 import { PlanningView } from './components/PlanningView';
 import { NavigationView } from './components/NavigationView';
 import { ErrorBanner } from './components/ErrorBanner';
+import { ExitedScreen } from './components/ExitedScreen';
 import { useGeolocation } from './features/geolocation/useGeolocation';
 import { useRoute } from './features/routing/useRoute';
 import { useTheme } from './features/theme/useTheme';
 import { navigationReducer, initialNavigationState } from './features/routing/navigationReducer';
-import type { GeocodingSuggestion } from './types';
+import type { GeocodingSuggestion, MapChromeInsets } from './types';
+
+// mapbox-gl é uma dependência pesada (~500KB+ minificado); carregá-la só
+// quando o mapa entra em tela evita bloquear o primeiro paint com JS que
+// ainda não é necessário para mostrar a busca/tema/atalhos.
+//
+// Uma única instância de MapView vive aqui, sempre montada como camada de
+// fundo em tela cheia — em vez de dentro de PlanningView/NavigationView.
+// PlanningView e NavigationView antes montavam cada uma o seu próprio
+// <MapView>, então toda troca de tela destruía e recriava o mapa Mapbox do
+// zero (novo contexto WebGL, novo carregamento de estilo/tiles), o que
+// deixava a abertura de cada tela perceptivelmente lenta e fazia a câmera
+// nascer no centro padrão antes de animar até a posição real. PlanningView
+// e NavigationView agora só desenham a UI por cima, com um espaço vazio e
+// "clicável através" (pointer-events-none) onde o mapa aparece por baixo.
+const MapView = lazy(() =>
+  import('./components/MapView').then((module) => ({ default: module.MapView })),
+);
 
 export function App() {
   const [state, dispatch] = useReducer(navigationReducer, initialNavigationState);
@@ -15,6 +33,8 @@ export function App() {
     useRoute(dispatch);
   const { theme, toggleTheme } = useTheme();
   const [placeName, setPlaceName] = useState<string | null>(null);
+  const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });
+  const [hasExitedApp, setHasExitedApp] = useState(false);
 
   useEffect(() => {
     if (geolocation.position) {
@@ -116,44 +136,102 @@ export function App() {
     setPlaceName(null);
   };
 
+  // Mesma limpeza de "sair da navegação" (RESET mantém `origin`, ver
+  // navigationReducer.ts), só que disparada a partir do cartão de destino
+  // ainda na tela de planejamento — permite cancelar a rota já calculada e
+  // voltar para uma busca em branco sem precisar escolher outro destino só
+  // para substituir o atual.
+  const handleCancelRoute = () => {
+    dispatch({ type: 'RESET' });
+    setPlaceName(null);
+  };
+
+  // Navegadores só permitem `window.close()` fechar uma aba que o próprio
+  // script abriu (ex.: via `window.open`); numa aba digitada/aberta pelo
+  // usuário diretamente, a chamada é ignorada silenciosamente, sem erro. Como
+  // não há como saber de dentro da página se o fechamento realmente
+  // aconteceu, o fallback é: se a página ainda estiver rodando pouco depois
+  // (ou seja, `window.close()` não funcionou), mostra a tela de despedida em
+  // vez de deixar o botão parecer quebrado sem nenhum retorno visível.
+  const handleExitApp = () => {
+    window.close();
+    window.setTimeout(() => setHasExitedApp(true), 300);
+  };
+
+  // Sempre montado, numa camada de fundo fixa em tela cheia (ver comentário
+  // do MapView acima) — as telas por cima têm um espaço vazio e
+  // "clicável através" no lugar onde o mapa aparece, para que gestos de
+  // pan/zoom cheguem até ele.
+  const mapLayer = (
+    <div className="fixed inset-0 z-0">
+      <Suspense fallback={null}>
+        <MapView
+          origin={state.origin}
+          destination={state.destination}
+          route={state.route}
+          isNavigating={state.status === 'navigating'}
+          headingDegrees={geolocation.headingDegrees}
+          theme={theme}
+          travelProfile={state.travelProfile}
+          speedMetersPerSecond={geolocation.speedMetersPerSecond}
+          chromeInsets={chromeInsets}
+        />
+      </Suspense>
+    </div>
+  );
+
+  if (hasExitedApp) {
+    return <ExitedScreen onReturn={() => setHasExitedApp(false)} />;
+  }
+
   if (geolocation.error) {
     return (
-      <div className="flex h-screen items-center justify-center p-6">
-        <ErrorBanner message={geolocation.error} onRetry={geolocation.retry} />
-      </div>
+      <>
+        {mapLayer}
+        <div className="relative flex h-screen items-center justify-center p-6">
+          <ErrorBanner message={geolocation.error} onRetry={geolocation.retry} />
+        </div>
+      </>
     );
   }
 
   if (state.status === 'navigating' || state.status === 'arrived') {
     return (
-      <NavigationView
-        state={state}
-        placeName={placeName}
-        speedMetersPerSecond={geolocation.speedMetersPerSecond}
-        headingDegrees={geolocation.headingDegrees}
-        theme={theme}
-        isRecalculating={state.routeDeviated && isRouteLoading}
-        routeError={state.routeDeviated && !isRouteLoading ? routeError : null}
-        onRetryRecalc={handleRetryRecalc}
-        onExit={handleExitNavigation}
-        onArrivalDone={handleExitNavigation}
-      />
+      <>
+        {mapLayer}
+        <NavigationView
+          state={state}
+          placeName={placeName}
+          speedMetersPerSecond={geolocation.speedMetersPerSecond}
+          isRecalculating={state.routeDeviated && isRouteLoading}
+          routeError={state.routeDeviated && !isRouteLoading ? routeError : null}
+          onRetryRecalc={handleRetryRecalc}
+          onExit={handleExitNavigation}
+          onArrivalDone={handleExitNavigation}
+          onExitApp={handleExitApp}
+        />
+      </>
     );
   }
 
   return (
-    <PlanningView
-      state={state}
-      placeName={placeName}
-      routeError={routeError}
-      isRouteLoading={isRouteLoading}
-      onDestinationSelected={handleDestinationSelected}
-      onTravelProfileChange={handleTravelProfileChange}
-      onStartNavigation={handleStartNavigation}
-      onRetryRoute={handleRetryRoute}
-      theme={theme}
-      onToggleTheme={toggleTheme}
-      headingDegrees={geolocation.headingDegrees}
-    />
+    <>
+      {mapLayer}
+      <PlanningView
+        state={state}
+        placeName={placeName}
+        routeError={routeError}
+        isRouteLoading={isRouteLoading}
+        onDestinationSelected={handleDestinationSelected}
+        onTravelProfileChange={handleTravelProfileChange}
+        onStartNavigation={handleStartNavigation}
+        onCancelRoute={handleCancelRoute}
+        onRetryRoute={handleRetryRoute}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onChromeInsetsChange={setChromeInsets}
+        onExitApp={handleExitApp}
+      />
+    </>
   );
 }

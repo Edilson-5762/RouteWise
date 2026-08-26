@@ -145,4 +145,28 @@ describe('navigationReducer', () => {
     expect(recalculada.route).toBe(sampleRoute);
     expect(recalculada.currentStepIndex).toBe(0);
   });
+
+  it('RESET mantém a origem (GPS) conhecida em vez de zerá-la', () => {
+    // Sem isso, sair da navegação (botão "X") zera `origin` para null; como o
+    // efeito em App.tsx que repõe `origin` só reage a uma MUDANÇA de
+    // referência em `geolocation.position` (não a `state.origin` em si), e o
+    // hook de geolocalização mantém a mesma referência enquanto o
+    // dispositivo está parado (deadband de ruído), `origin` ficava preso em
+    // null indefinidamente — e sem origem, o efeito que chama `planRoute`
+    // nunca dispara, então escolher um novo destino não fazia nada
+    // (sintoma relatado: "depois do X, não consigo pesquisar de novo").
+    const withOrigin = navigationReducer(initialNavigationState, {
+      type: 'SET_ORIGIN',
+      origin: { lat: -15.79, lng: -47.88 },
+    });
+    const planned = navigationReducer(withOrigin, { type: 'ROUTE_PLANNED', route: sampleRoute });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const reset = navigationReducer(navigating, { type: 'RESET' });
+
+    expect(reset.origin).toEqual({ lat: -15.79, lng: -47.88 });
+    expect(reset.destination).toBeNull();
+    expect(reset.route).toBeNull();
+    expect(reset.status).toBe('idle');
+  });
 });

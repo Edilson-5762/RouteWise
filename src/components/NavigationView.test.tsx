@@ -4,37 +4,6 @@ import { NavigationView } from './NavigationView';
 import { initialNavigationState } from '../features/routing/navigationReducer';
 import type { NavigationState } from '../types';
 
-vi.mock('mapbox-gl', () => {
-  class FakeMap {
-    isStyleLoaded = () => true;
-    on = vi.fn();
-    once = vi.fn();
-    remove = vi.fn();
-    setCenter = vi.fn();
-    setStyle = vi.fn();
-    easeTo = vi.fn();
-    getBearing = vi.fn().mockReturnValue(0);
-    getSource = vi.fn().mockReturnValue(undefined);
-    addSource = vi.fn();
-    addLayer = vi.fn();
-    getLayer = vi.fn().mockReturnValue(undefined);
-    removeLayer = vi.fn();
-    removeSource = vi.fn();
-    fitBounds = vi.fn();
-  }
-  class FakeMarker {
-    setLngLat = vi.fn().mockReturnThis();
-    addTo = vi.fn().mockReturnThis();
-  }
-  class FakeLngLatBounds {
-    extend = vi.fn().mockReturnThis();
-    constructor(public sw?: unknown, public ne?: unknown) {}
-  }
-  return {
-    default: { Map: FakeMap, Marker: FakeMarker, LngLatBounds: FakeLngLatBounds, accessToken: '' },
-  };
-});
-
 vi.stubGlobal('speechSynthesis', { speak: vi.fn(), cancel: vi.fn() });
 vi.stubGlobal(
   'SpeechSynthesisUtterance',
@@ -71,13 +40,12 @@ describe('NavigationView', () => {
         state={navigatingState}
         placeName="Av. Paulista, São Paulo"
         speedMetersPerSecond={null}
-        headingDegrees={null}
-        theme="light"
         isRecalculating={false}
         routeError={null}
         onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -90,13 +58,12 @@ describe('NavigationView', () => {
         state={{ ...navigatingState, status: 'arrived' }}
         placeName="Av. Paulista, São Paulo"
         speedMetersPerSecond={null}
-        headingDegrees={null}
-        theme="light"
         isRecalculating={false}
         routeError={null}
         onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -109,13 +76,12 @@ describe('NavigationView', () => {
         state={navigatingState}
         placeName="Av. Paulista, São Paulo"
         speedMetersPerSecond={null}
-        headingDegrees={null}
-        theme="light"
         isRecalculating
         routeError={null}
         onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -128,13 +94,12 @@ describe('NavigationView', () => {
         state={navigatingState}
         placeName="Av. Paulista, São Paulo"
         speedMetersPerSecond={null}
-        headingDegrees={null}
-        theme="light"
         isRecalculating={false}
         routeError="Erro ao recalcular a rota."
         onRetryRecalc={vi.fn()}
         onExit={vi.fn()}
         onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -149,13 +114,12 @@ describe('NavigationView', () => {
         state={{ ...navigatingState, route: null }}
         placeName="Av. Paulista, São Paulo"
         speedMetersPerSecond={null}
-        headingDegrees={null}
-        theme="light"
         isRecalculating={false}
         routeError={null}
         onRetryRecalc={vi.fn()}
         onExit={onExit}
         onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 

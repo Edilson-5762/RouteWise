@@ -1,4 +1,4 @@
-import { Volume2, VolumeX, X } from 'lucide-react';
+import { LogOut, Volume2, VolumeX, X } from 'lucide-react';
 import { formatDistance, formatDuration } from '../utils/format';
 
 interface NavigationStatusBarProps {
@@ -9,6 +9,7 @@ interface NavigationStatusBarProps {
   isVoiceMuted: boolean;
   onToggleVoice: () => void;
   onExit: () => void;
+  onExitApp: () => void;
 }
 
 export function NavigationStatusBar({
@@ -19,6 +20,7 @@ export function NavigationStatusBar({
   isVoiceMuted,
   onToggleVoice,
   onExit,
+  onExitApp,
 }: NavigationStatusBarProps) {
   const speedKmh =
     speedMetersPerSecond !== null ? Math.round(speedMetersPerSecond * 3.6) : null;
@@ -52,6 +54,14 @@ export function NavigationStatusBar({
           className="rounded-full bg-danger/10 p-2 text-danger"
         >
           <X size={20} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={onExitApp}
+          aria-label="Sair da página"
+          className="rounded-full bg-danger/10 p-2 text-danger"
+        >
+          <LogOut size={20} aria-hidden="true" />
         </button>
       </div>
     </div>

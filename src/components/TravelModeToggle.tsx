@@ -1,4 +1,4 @@
-import { Car, Footprints, Bike } from 'lucide-react';
+import { Car, Footprints, Bike, Motorbike } from 'lucide-react';
 import type { TravelProfile } from '../types';
 
 interface TravelModeToggleProps {
@@ -8,6 +8,7 @@ interface TravelModeToggleProps {
 
 const MODES: { profile: TravelProfile; label: string; Icon: typeof Car }[] = [
   { profile: 'driving', label: 'Carro', Icon: Car },
+  { profile: 'motorcycling', label: 'Moto', Icon: Motorbike },
   { profile: 'walking', label: 'A pé', Icon: Footprints },
   { profile: 'cycling', label: 'Bicicleta', Icon: Bike },
 ];

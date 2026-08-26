@@ -18,4 +18,16 @@ describe('TravelModeToggle', () => {
 
     expect(onChange).toHaveBeenCalledWith('cycling');
   });
+
+  it('inclui a opção de moto e a seleciona ao clicar', () => {
+    const onChange = vi.fn();
+    render(<TravelModeToggle profile="driving" onChange={onChange} />);
+
+    const motoButton = screen.getByRole('button', { name: 'Moto' });
+    expect(motoButton).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(motoButton);
+
+    expect(onChange).toHaveBeenCalledWith('motorcycling');
+  });
 });

@@ -3,13 +3,20 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { App } from './App';
 import * as mapboxClient from './services/mapboxClient';
 
+const mapConstructorSpy = vi.fn();
+const mapRemoveSpy = vi.fn();
+
 vi.mock('mapbox-gl', () => {
   class FakeMap {
     isStyleLoaded = () => true;
     on = vi.fn();
+    off = vi.fn();
     once = vi.fn();
-    remove = vi.fn();
+    remove = mapRemoveSpy;
     setCenter = vi.fn();
+    constructor(...args: unknown[]) {
+      mapConstructorSpy(...args);
+    }
     getSource = vi.fn().mockReturnValue(undefined);
     addSource = vi.fn();
     addLayer = vi.fn();
@@ -24,6 +31,8 @@ vi.mock('mapbox-gl', () => {
   class FakeMarker {
     setLngLat = vi.fn().mockReturnThis();
     addTo = vi.fn().mockReturnThis();
+    setRotation = vi.fn().mockReturnThis();
+    remove = vi.fn();
   }
   class FakeLngLatBounds {
     extend = vi.fn().mockReturnThis();
@@ -45,6 +54,8 @@ vi.stubGlobal(
 
 describe('App', () => {
   beforeEach(() => {
+    mapConstructorSpy.mockClear();
+    mapRemoveSpy.mockClear();
     Object.defineProperty(global.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
@@ -61,12 +72,9 @@ describe('App', () => {
 
   it('planeja uma rota assim que um destino é selecionado e mostra o resumo', async () => {
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
         { lat: -23.5505, lng: -46.6333 },
@@ -114,12 +122,9 @@ describe('App', () => {
     });
 
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
         { lat: -23.5505, lng: -46.6333 },
@@ -181,12 +186,9 @@ describe('App', () => {
     });
 
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
 
     let resolveDirections:
       ((route: Awaited<ReturnType<typeof mapboxClient.getDirections>>) => void) | null = null;
@@ -255,12 +257,9 @@ describe('App', () => {
 
   it('mostra banner de erro quando o cálculo de rota falha, e o retry rechama getDirections', async () => {
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
     const getDirectionsSpy = vi
       .spyOn(mapboxClient, 'getDirections')
       .mockRejectedValue(new Error('Falha ao calcular rota: 500'));
@@ -321,12 +320,9 @@ describe('App', () => {
 
   it('transiciona para a NavigationView em tela cheia ao iniciar a navegação', async () => {
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
         { lat: -23.5505, lng: -46.6333 },
@@ -363,6 +359,128 @@ describe('App', () => {
     expect(screen.queryByLabelText('Buscar destino')).not.toBeInTheDocument();
   });
 
+  it('reaproveita a mesma instância do mapa Mapbox ao trocar de tela, em vez de recriá-la', async () => {
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
+    ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
+    vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
+      geometry: [
+        { lat: -23.5505, lng: -46.6333 },
+        { lat: -23.5613, lng: -46.6564 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 500,
+          durationSeconds: 60,
+          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          maneuverType: 'continue',
+          maneuverModifier: null,
+        },
+      ],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    });
+
+    render(<App />);
+
+    // PlanningView monta o mapa uma vez.
+    await waitFor(() => {
+      expect(mapConstructorSpy).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await screen.findByText('Iniciar navegação');
+    fireEvent.click(screen.getByText('Iniciar navegação'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Siga em frente')).toBeInTheDocument();
+    });
+
+    // Trocar para a NavigationView não deveria destruir e recriar o mapa.
+    expect(mapConstructorSpy).toHaveBeenCalledTimes(1);
+    expect(mapRemoveSpy).not.toHaveBeenCalled();
+  });
+
+  it('recalcula a rota a partir da posição atual do GPS ao iniciar a navegação', async () => {
+    let sendPosition: PositionCallback | null = null;
+    Object.defineProperty(global.navigator, 'geolocation', {
+      value: {
+        watchPosition: vi.fn((success: PositionCallback) => {
+          sendPosition = success;
+          success({
+            coords: { latitude: -23.5505, longitude: -46.6333 },
+          } as GeolocationPosition);
+          return 1;
+        }),
+        clearWatch: vi.fn(),
+      },
+      configurable: true,
+    });
+
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
+    ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
+    const getDirectionsSpy = vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
+      geometry: [
+        { lat: -23.5505, lng: -46.6333 },
+        { lat: -23.5613, lng: -46.6564 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 500,
+          durationSeconds: 60,
+          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          maneuverType: 'continue',
+          maneuverModifier: null,
+        },
+      ],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    const option = await screen.findByText('Av. Paulista, São Paulo');
+    fireEvent.click(option);
+
+    await screen.findByText('Iniciar navegação');
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+
+    // O GPS se move um pouco enquanto o usuário ainda está olhando o cartão
+    // de destino, antes de apertar "Iniciar navegação".
+    act(() => {
+      sendPosition!({
+        coords: { latitude: -23.5599, longitude: -46.634 },
+      } as GeolocationPosition);
+    });
+
+    fireEvent.click(screen.getByText('Iniciar navegação'));
+
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+    });
+    expect(getDirectionsSpy).toHaveBeenLastCalledWith(
+      { lat: -23.5599, lng: -46.634 },
+      { lat: -23.5613, lng: -46.6564 },
+      'driving',
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Siga em frente')).toBeInTheDocument();
+    });
+  });
+
   it('tenta recalcular a rota apenas uma vez por episódio de desvio quando o recálculo falha', async () => {
     let sendPosition: PositionCallback | null = null;
     Object.defineProperty(global.navigator, 'geolocation', {
@@ -380,12 +498,9 @@ describe('App', () => {
     });
 
     vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
-      {
-        id: '1',
-        placeName: 'Av. Paulista, São Paulo',
-        coordinates: { lat: -23.5613, lng: -46.6564 },
-      },
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
     ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
 
     const initialRoute = {
       geometry: [
@@ -408,6 +523,11 @@ describe('App', () => {
 
     const getDirectionsSpy = vi
       .spyOn(mapboxClient, 'getDirections')
+      // 1ª chamada: planejamento inicial. 2ª: recálculo automático que
+      // START_NAVIGATION dispara para atualizar a rota a partir da posição
+      // atual (ver navigationReducer.ts). Ambas bem-sucedidas, para isolar o
+      // cenário de falha no episódio de desvio testado abaixo.
+      .mockResolvedValueOnce(initialRoute)
       .mockResolvedValueOnce(initialRoute)
       .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
 
@@ -425,7 +545,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('Siga em frente')).toBeInTheDocument();
     });
-    expect(getDirectionsSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+    });
 
     // Primeira posição desviada (bem longe da rota e do destino): dispara uma
     // tentativa de recálculo, que falha.
@@ -436,7 +558,7 @@ describe('App', () => {
     });
 
     await waitFor(() => {
-      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
     });
     await waitFor(() => {
       expect(screen.getByText('Falha ao recalcular rota: 500')).toBeInTheDocument();
@@ -450,6 +572,60 @@ describe('App', () => {
       } as GeolocationPosition);
     });
 
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('permite pesquisar um novo destino depois de sair da navegação pelo botão "X", mesmo com o GPS parado', async () => {
+    // O mock padrão de geolocalização (beforeEach) reporta a posição UMA vez
+    // só e nunca mais chama `success` de novo — reproduz fielmente um
+    // dispositivo parado, o cenário exato em que o bug aparecia: sem manter
+    // `origin` no RESET, ele ficava preso em null (nada re-dispara o efeito
+    // que o repõe, já que `geolocation.position` nunca muda de referência) e
+    // a segunda busca nunca conseguia planejar rota.
+    vi.spyOn(mapboxClient, 'searchPlaces').mockResolvedValue([
+      { id: '1', placeName: 'Av. Paulista, São Paulo' },
+    ]);
+    vi.spyOn(mapboxClient, 'retrievePlace').mockResolvedValue({ lat: -23.5613, lng: -46.6564 });
+    const getDirectionsSpy = vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
+      geometry: [
+        { lat: -23.5505, lng: -46.6333 },
+        { lat: -23.5613, lng: -46.6564 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 500,
+          durationSeconds: 60,
+          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+          maneuverType: 'continue',
+          maneuverModifier: null,
+        },
+      ],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    fireEvent.click(await screen.findByText('Av. Paulista, São Paulo'));
+    await screen.findByText('Iniciar navegação');
+    fireEvent.click(screen.getByText('Iniciar navegação'));
+    await screen.findByText('Siga em frente');
     expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByLabelText('Sair da navegação'));
+
+    fireEvent.change(await screen.findByLabelText('Buscar destino'), {
+      target: { value: 'Paulista' },
+    });
+    fireEvent.click(await screen.findByText('Av. Paulista, São Paulo'));
+
+    await waitFor(() => {
+      expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
+    });
+    expect(screen.getByText('Iniciar navegação')).toBeInTheDocument();
   });
 });

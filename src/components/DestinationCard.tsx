@@ -12,6 +12,7 @@ interface DestinationCardProps {
   onSave: () => void;
   onShare: () => void;
   onStartNavigation: () => void;
+  onCancel: () => void;
   isSaved: boolean;
 }
 
@@ -24,6 +25,7 @@ export function DestinationCard({
   onSave,
   onShare,
   onStartNavigation,
+  onCancel,
   isSaved,
 }: DestinationCardProps) {
   return (
@@ -64,6 +66,14 @@ export function DestinationCard({
         className="w-full rounded-xl bg-primary py-3 font-semibold text-primary-foreground"
       >
         Iniciar navegação
+      </button>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        className="w-full rounded-xl py-2 text-sm font-medium text-danger hover:bg-danger/10"
+      >
+        Cancelar trajeto
       </button>
     </div>
   );

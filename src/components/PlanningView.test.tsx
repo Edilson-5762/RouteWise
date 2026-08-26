@@ -4,37 +4,6 @@ import { PlanningView } from './PlanningView';
 import { initialNavigationState } from '../features/routing/navigationReducer';
 import type { NavigationState } from '../types';
 
-vi.mock('mapbox-gl', () => {
-  class FakeMap {
-    isStyleLoaded = () => true;
-    on = vi.fn();
-    once = vi.fn();
-    remove = vi.fn();
-    setCenter = vi.fn();
-    setStyle = vi.fn();
-    easeTo = vi.fn();
-    getBearing = vi.fn().mockReturnValue(0);
-    getSource = vi.fn().mockReturnValue(undefined);
-    addSource = vi.fn();
-    addLayer = vi.fn();
-    getLayer = vi.fn().mockReturnValue(undefined);
-    removeLayer = vi.fn();
-    removeSource = vi.fn();
-    fitBounds = vi.fn();
-  }
-  class FakeMarker {
-    setLngLat = vi.fn().mockReturnThis();
-    addTo = vi.fn().mockReturnThis();
-  }
-  class FakeLngLatBounds {
-    extend = vi.fn().mockReturnThis();
-    constructor(public sw?: unknown, public ne?: unknown) {}
-  }
-  return {
-    default: { Map: FakeMap, Marker: FakeMarker, LngLatBounds: FakeLngLatBounds, accessToken: '' },
-  };
-});
-
 describe('PlanningView', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -62,10 +31,12 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={vi.fn()}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -91,10 +62,12 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={onStartNavigation}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={vi.fn()}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -115,10 +88,12 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={onToggleTheme}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -145,10 +120,12 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={vi.fn()}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -185,10 +162,12 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={vi.fn()}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
@@ -211,15 +190,43 @@ describe('PlanningView', () => {
         onDestinationSelected={vi.fn()}
         onTravelProfileChange={vi.fn()}
         onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
         onRetryRoute={vi.fn()}
         theme="light"
         onToggleTheme={vi.fn()}
-        headingDegrees={null}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={vi.fn()}
       />,
     );
 
     fireEvent.click(screen.getByText('Novo'));
 
     expect(screen.getByLabelText('Buscar destino')).toHaveFocus();
+  });
+
+  it('chama onExitApp ao clicar em "Sair da página"', () => {
+    const onExitApp = vi.fn();
+
+    render(
+      <PlanningView
+        state={initialNavigationState}
+        placeName={null}
+        routeError={null}
+        isRouteLoading={false}
+        onDestinationSelected={vi.fn()}
+        onTravelProfileChange={vi.fn()}
+        onStartNavigation={vi.fn()}
+        onCancelRoute={vi.fn()}
+        onRetryRoute={vi.fn()}
+        theme="light"
+        onToggleTheme={vi.fn()}
+        onChromeInsetsChange={vi.fn()}
+        onExitApp={onExitApp}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Sair da página'));
+
+    expect(onExitApp).toHaveBeenCalled();
   });
 });

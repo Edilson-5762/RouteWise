@@ -14,3 +14,11 @@ export function formatDuration(seconds: number): string {
   const minutes = totalMinutes % 60;
   return `${hours}h ${minutes}min`;
 }
+
+// Mostra "0 km/h" (não oculta o rótulo) quando o GPS ainda não reportou
+// velocidade — é o que aparece ao lado do avatar do veículo na tela inicial
+// do Waze antes do usuário sair do lugar.
+export function formatSpeedKmh(speedMetersPerSecond: number | null): string {
+  const speedKmh = speedMetersPerSecond !== null ? Math.round(speedMetersPerSecond * 3.6) : 0;
+  return `${speedKmh} km/h`;
+}
