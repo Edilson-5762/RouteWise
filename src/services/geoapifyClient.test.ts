@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { searchPlacesByCategory, searchPlaces, GeoapifyRequestError } from './geoapifyClient';
+import {
+  searchPlacesByCategory,
+  searchPlaces,
+  searchNearbyPlaces,
+  GeoapifyRequestError,
+} from './geoapifyClient';
 import type { PlaceCategoryDefinition } from '../data/placeCategories';
 
 const FARMACIA: PlaceCategoryDefinition = {
@@ -218,5 +223,76 @@ describe('searchPlaces', () => {
     await expect(searchPlaces('Bradesco', { lat: -15.8, lng: -47.9 })).rejects.toThrow(
       GeoapifyRequestError,
     );
+  });
+});
+
+describe('searchNearbyPlaces', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('converte features da Geoapify em PlaceSuggestion', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            properties: {
+              name: "D'Casa Ferramentas",
+              formatted: "D'Casa Ferramentas, SHVP - Rua 4, Vicente Pires - DF, Brasil",
+              lat: -15.8306,
+              lon: -48.0645,
+              place_id: 'place-nearby-1',
+            },
+          },
+        ],
+      }),
+    });
+
+    const results = await searchNearbyPlaces({ lat: -15.8306, lng: -48.0645 }, 900);
+
+    expect(results).toEqual([
+      {
+        id: 'place-nearby-1',
+        placeName: "D'Casa Ferramentas, SHVP - Rua 4, Vicente Pires - DF, Brasil",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
+    ]);
+  });
+
+  it('monta a URL com categorias amplas, raio circular, limite e idioma corretos', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ features: [] }),
+    });
+
+    await searchNearbyPlaces({ lat: -15.8306, lng: -48.0645 }, 900);
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('categories=commercial%2Cservice%2Ccatering%2Chealthcare');
+    expect(url).toContain('filter=circle%3A-48.0645%2C-15.8306%2C900');
+    expect(url).toContain('limit=100');
+    expect(url).toContain('lang=pt');
+  });
+
+  it('lança GeoapifyRequestError com o status HTTP quando a resposta não é ok', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 429 });
+
+    await expect(searchNearbyPlaces({ lat: -15.8306, lng: -48.0645 }, 900)).rejects.toThrow(
+      GeoapifyRequestError,
+    );
+
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 429 });
+    try {
+      await searchNearbyPlaces({ lat: -15.8306, lng: -48.0645 }, 900);
+      throw new Error('deveria ter lançado');
+    } catch (error) {
+      expect(error).toBeInstanceOf(GeoapifyRequestError);
+      expect((error as InstanceType<typeof GeoapifyRequestError>).status).toBe(429);
+    }
   });
 });

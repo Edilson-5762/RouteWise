@@ -13,9 +13,12 @@ const MAX_SUGGESTIONS = 8;
 const DEFAULT_SEARCH_CENTER: Coordinates = { lat: -15.7939, lng: -47.8828 };
 
 export class GeoapifyRequestError extends Error {
-  constructor(message: string) {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
     super(message);
     this.name = 'GeoapifyRequestError';
+    this.status = status;
   }
 }
 
@@ -79,6 +82,7 @@ export async function searchPlacesByCategory(
   if (!response.ok) {
     throw new GeoapifyRequestError(
       `Falha na busca de ${category.categoryLabel.toLowerCase()}: ${response.status}`,
+      response.status,
     );
   }
 
@@ -123,7 +127,38 @@ export async function searchPlaces(
   const response = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`);
 
   if (!response.ok) {
-    throw new GeoapifyRequestError(`Falha na busca de endereço: ${response.status}`);
+    throw new GeoapifyRequestError(`Falha na busca de endereço: ${response.status}`, response.status);
+  }
+
+  return toSuggestions((await response.json()) as GeoapifyResponse);
+}
+
+const NEARBY_PLACES_CATEGORIES = 'commercial,service,catering,healthcare';
+const NEARBY_PLACES_RESULT_LIMIT = 100;
+
+// Busca ampla por proximidade (sem texto/categoria específica) usada pela
+// camada de marcadores de estabelecimentos próximos no mapa (ver
+// `useNearbyPlacesMarkers`) — preenche a lacuna de cobertura de comércio
+// local que os rótulos nativos do estilo do Mapbox não têm nesta região
+// (confirmado consultando a Tilequery API do Mapbox diretamente).
+export async function searchNearbyPlaces(
+  center: Coordinates,
+  radiusMeters: number,
+): Promise<PlaceSuggestion[]> {
+  const params = new URLSearchParams({
+    categories: NEARBY_PLACES_CATEGORIES,
+    filter: `circle:${center.lng},${center.lat},${radiusMeters}`,
+    limit: String(NEARBY_PLACES_RESULT_LIMIT),
+    lang: 'pt',
+    apiKey: GEOAPIFY_API_KEY,
+  });
+  const response = await fetch(`${PLACES_URL}?${params.toString()}`);
+
+  if (!response.ok) {
+    throw new GeoapifyRequestError(
+      `Falha ao buscar estabelecimentos próximos: ${response.status}`,
+      response.status,
+    );
   }
 
   return toSuggestions((await response.json()) as GeoapifyResponse);
