@@ -82,6 +82,8 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
       return;
     }
 
+    let isCancelled = false;
+
     const runSearch = async () => {
       const rawCenter = map.getCenter();
       const center: Coordinates = { lat: rawCenter.lat, lng: rawCenter.lng };
@@ -98,11 +100,14 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         return;
       }
 
-      lastFetchCenterRef.current = center;
-
       let results: GeocodingSuggestion[];
       try {
         const suggestions = await searchNearbyPlaces(center, SEARCH_RADIUS_METERS);
+
+        if (isCancelled) {
+          return;
+        }
+
         results = suggestions.filter(
           (place): place is GeocodingSuggestion => place.coordinates !== undefined,
         );
@@ -110,8 +115,13 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
         // Falha silenciosa de propósito (ver spec): esta é uma camada de
         // enriquecimento visual, não um caminho crítico. A próxima busca
         // válida tenta de novo naturalmente.
+        if (isCancelled) {
+          return;
+        }
         return;
       }
+
+      lastFetchCenterRef.current = center;
 
       clearMarkers();
       markersRef.current = results.map((place) => {
@@ -139,6 +149,7 @@ export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlac
     map.on('moveend', handleMoveEnd);
 
     return () => {
+      isCancelled = true;
       map.off('moveend', handleMoveEnd);
       if (debounceTimerRef.current !== null) {
         clearTimeout(debounceTimerRef.current);

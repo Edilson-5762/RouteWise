@@ -61,6 +61,9 @@ describe('useNearbyPlacesMarkers', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     markerElements.length = 0;
+    // mockClear() clears call history but preserves implementation, so we
+    // restore the mockReturnThis() behavior each test — it's a no-op on the
+    // second+ call, but ensures consistency across the test suite.
     setLngLatMock.mockClear();
     setLngLatMock.mockReturnThis();
     addToMock.mockClear();
@@ -229,6 +232,7 @@ describe('useNearbyPlacesMarkers', () => {
     });
 
     expect(spy).not.toHaveBeenCalled();
+    expect(addToMock).not.toHaveBeenCalled();
   });
 
   it('remove os marcadores e o listener ao desmontar', async () => {
@@ -250,5 +254,36 @@ describe('useNearbyPlacesMarkers', () => {
     unmount();
 
     expect(removeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retenta no próximo moveend válido se a busca falhar (distância gate não é envenenada)', async () => {
+    // Primeira busca falha (erro de rede, etc.)
+    let searchSpy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockRejectedValueOnce(new Error('Network error'));
+    const map = createFakeMap(BASE_CENTER, 16);
+
+    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+
+    // Simula um moveend, a busca falha silenciosamente
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(addToMock).not.toHaveBeenCalled(); // Nenhum marcador foi criado
+
+    // Segunda busca no MESMO centro com sucesso — prova que a falha anterior
+    // não foi contada como "busca completada" para fins de gating.
+    searchSpy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
+      { id: 'p1', placeName: 'Farmácia Popular, Rua 4', coordinates: { lat: -15.8267, lng: -48.0654 } },
+    ]);
+
+    await act(async () => {
+      map.__simulateMoveEnd(BASE_CENTER, 16);
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(searchSpy).toHaveBeenCalledTimes(1); // A busca foi disparada novamente
+    expect(addToMock).toHaveBeenCalledTimes(1); // Marcador foi criado
   });
 });
