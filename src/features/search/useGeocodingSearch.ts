@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSearchSessionToken, retrievePlace, searchPlaces } from '../../services/mapboxClient';
+import { matchPlaceCategory } from '../../data/placeCategories';
+import { searchPlacesByCategory } from '../../services/overpassClient';
 import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
@@ -22,7 +24,12 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
     setIsLoading(true);
 
     const timeoutId = setTimeout(() => {
-      searchPlaces(query, sessionTokenRef.current, proximity)
+      const category = matchPlaceCategory(query);
+      const search = category
+        ? searchPlacesByCategory(category, proximity ?? null)
+        : searchPlaces(query, sessionTokenRef.current, proximity);
+
+      search
         .then((results) => {
           if (!isCancelled) {
             setSuggestions(results);
