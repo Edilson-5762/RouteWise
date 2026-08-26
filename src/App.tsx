@@ -175,6 +175,7 @@ export function App() {
           travelProfile={state.travelProfile}
           speedMetersPerSecond={geolocation.speedMetersPerSecond}
           chromeInsets={chromeInsets}
+          onDestinationSelected={handleDestinationSelected}
         />
       </Suspense>
     </div>

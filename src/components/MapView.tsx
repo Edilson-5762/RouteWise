@@ -1,7 +1,8 @@
 import { useRef } from 'react';
 import { LocateFixed } from 'lucide-react';
 import { useMapboxMap } from '../features/map/useMapboxMap';
-import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../types';
+import { useNearbyPlacesMarkers } from '../features/places/useNearbyPlacesMarkers';
+import type { Coordinates, GeocodingSuggestion, MapChromeInsets, Route, TravelProfile } from '../types';
 
 interface MapViewProps {
   origin: Coordinates | null;
@@ -13,6 +14,7 @@ interface MapViewProps {
   travelProfile: TravelProfile;
   speedMetersPerSecond: number | null;
   chromeInsets?: MapChromeInsets;
+  onDestinationSelected: (suggestion: GeocodingSuggestion) => void;
 }
 
 export function MapView({
@@ -25,9 +27,10 @@ export function MapView({
   travelProfile,
   speedMetersPerSecond,
   chromeInsets,
+  onDestinationSelected,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { isFollowingUser, recenter } = useMapboxMap({
+  const { mapInstance, isFollowingUser, recenter } = useMapboxMap({
     containerRef,
     origin,
     destination,
@@ -38,6 +41,14 @@ export function MapView({
     travelProfile,
     speedMetersPerSecond,
     chromeInsets,
+  });
+
+  // Sempre habilitado (planejamento, rota traçada e navegação) — ver spec
+  // `docs/superpowers/specs/2026-08-26-nearby-places-overlay-design.md`.
+  useNearbyPlacesMarkers({
+    map: mapInstance,
+    enabled: true,
+    onSelect: onDestinationSelected,
   });
 
   return (
