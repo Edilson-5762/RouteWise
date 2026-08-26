@@ -161,5 +161,14 @@ export async function searchNearbyPlaces(
     );
   }
 
-  return toSuggestions((await response.json()) as GeoapifyResponse);
+  const data = (await response.json()) as GeoapifyResponse;
+  // Só estabelecimentos com nome próprio: a Geoapify às vezes devolve, dentro
+  // destas categorias, um trecho de rua/quadra sem nome de negócio — nesse
+  // caso `formatted` é só o endereço, e o rótulo do marcador (que usa o
+  // primeiro trecho de `formatted`) mostraria o nome da rua como se fosse um
+  // estabelecimento. Não aplicar este filtro em `toSuggestions` (compartilhado
+  // com `searchPlaces`/`searchPlacesByCategory`): busca por texto/categoria
+  // precisa continuar aceitando endereços e bairros sem nome próprio.
+  const namedFeatures = data.features.filter((feature) => feature.properties.name);
+  return toSuggestions({ features: namedFeatures });
 }

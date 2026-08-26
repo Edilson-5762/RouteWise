@@ -295,4 +295,41 @@ describe('searchNearbyPlaces', () => {
       expect((error as InstanceType<typeof GeoapifyRequestError>).status).toBe(429);
     }
   });
+
+  it('descarta resultados sem nome próprio (ex.: trecho de rua sem estabelecimento), mantendo só lugares nomeados', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            properties: {
+              name: "D'Casa Ferramentas",
+              formatted: "D'Casa Ferramentas, SHVP - Rua 4, Vicente Pires - DF, Brasil",
+              lat: -15.8306,
+              lon: -48.0645,
+              place_id: 'place-nearby-1',
+            },
+          },
+          {
+            properties: {
+              formatted: 'SHVP - Rua 4, Vicente Pires - DF, Brasil',
+              lat: -15.8307,
+              lon: -48.0646,
+              place_id: 'place-nearby-2',
+            },
+          },
+        ],
+      }),
+    });
+
+    const results = await searchNearbyPlaces({ lat: -15.8306, lng: -48.0645 }, 900);
+
+    expect(results).toEqual([
+      {
+        id: 'place-nearby-1',
+        placeName: "D'Casa Ferramentas, SHVP - Rua 4, Vicente Pires - DF, Brasil",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
+    ]);
+  });
 });
