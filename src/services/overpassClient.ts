@@ -4,7 +4,14 @@ import { haversineDistanceMeters } from '../utils/distance';
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const SEARCH_RADIUS_METERS = 8000;
-const OVERPASS_ELEMENT_LIMIT = 20;
+// A Overpass API não ordena resultados por distância — `out N` devolve os
+// N primeiros na ordem interna do servidor (por tipo de elemento, depois ID
+// OSM), não os N mais próximos. Este limite precisa ser bem maior que
+// MAX_SUGGESTIONS porque é o tamanho do pool de candidatos onde o cliente
+// vai executar a ordenação por distância e só então cortar em
+// MAX_SUGGESTIONS. Um valor pequeno aqui faz o corte acontecer no lugar
+// errado (no servidor, antes de qualquer cálculo de distância).
+const OVERPASS_ELEMENT_LIMIT = 200;
 const MAX_SUGGESTIONS = 8;
 
 // Fallback usado só quando a busca por categoria acontece sem localização
