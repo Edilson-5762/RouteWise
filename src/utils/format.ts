@@ -1,0 +1,24 @@
+export function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)} m`;
+  }
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+export function formatDuration(seconds: number): string {
+  const totalMinutes = Math.round(seconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} min`;
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}min`;
+}
+
+// Mostra "0 km/h" (não oculta o rótulo) quando o GPS ainda não reportou
+// velocidade — é o que aparece ao lado do avatar do veículo na tela inicial
+// do Waze antes do usuário sair do lugar.
+export function formatSpeedKmh(speedMetersPerSecond: number | null): string {
+  const speedKmh = speedMetersPerSecond !== null ? Math.round(speedMetersPerSecond * 3.6) : 0;
+  return `${speedKmh} km/h`;
+}

@@ -22,7 +22,7 @@
 
 ---
 
-## Tarefa 1: Bootstrap do Projeto
+## Task 1: Bootstrap do Projeto
 
 **Arquivos:**
 - Criar: `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `tailwind.config.js`, `postcss.config.js`, `index.html`, `src/main.tsx`, `src/App.tsx` (placeholder), `src/index.css`, `src/vite-env.d.ts`, `src/test/setup.ts`
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@eslint/js": "^9.9.0",
     "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.0",
     "@types/geojson": "^7946.0.14",
     "@types/mapbox-gl": "^3.4.0",
@@ -92,6 +93,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',
+    passWithNoTests: true,
   },
 });
 ```
@@ -139,7 +141,8 @@ import '@testing-library/jest-dom/vitest';
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    "noEmit": true
   },
   "include": ["vite.config.ts"]
 }
@@ -241,6 +244,7 @@ dist
 .env.local
 *.log
 .DS_Store
+*.tsbuildinfo
 ```
 
 - [ ] **Passo 14: Criar `.env.example`**
@@ -333,7 +337,7 @@ git commit -m "chore: bootstrap do projeto com Vite, React, TypeScript e Tailwin
 
 ---
 
-## Tarefa 2: Tipos Compartilhados e Utilitário de Distância
+## Task 2: Tipos Compartilhados e Utilitário de Distância
 
 **Arquivos:**
 - Criar: `src/types/index.ts`
@@ -478,7 +482,7 @@ git commit -m "feat: adiciona tipos compartilhados e utilitario de distancia"
 
 ---
 
-## Tarefa 3: Utilitário de Formatação
+## Task 3: Utilitário de Formatação
 
 **Arquivos:**
 - Criar: `src/utils/format.ts`
@@ -557,7 +561,7 @@ git commit -m "feat: adiciona utilitario de formatacao de distancia e duracao"
 
 ---
 
-## Tarefa 4: Cliente Mapbox (Geocoding + Directions)
+## Task 4: Cliente Mapbox (Geocoding + Directions)
 
 **Arquivos:**
 - Criar: `src/services/mapboxClient.ts`
@@ -797,7 +801,7 @@ git commit -m "feat: adiciona cliente da API do Mapbox (geocoding e directions)"
 
 ---
 
-## Tarefa 5: Hook de Geolocalização
+## Task 5: Hook de Geolocalização
 
 **Arquivos:**
 - Criar: `src/features/geolocation/useGeolocation.ts`
@@ -926,7 +930,6 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { ...state, retry: startWatching };
@@ -947,7 +950,7 @@ git commit -m "feat: adiciona hook de geolocalizacao"
 
 ---
 
-## Tarefa 6: Hook de Busca com Autocomplete
+## Task 6: Hook de Busca com Autocomplete
 
 **Arquivos:**
 - Criar: `src/features/search/useGeocodingSearch.ts`
@@ -1074,7 +1077,7 @@ git commit -m "feat: adiciona hook de busca de destino com autocomplete"
 
 ---
 
-## Tarefa 7: Reducer de Navegação (Máquina de Estados)
+## Task 7: Reducer de Navegação (Máquina de Estados)
 
 **Arquivos:**
 - Criar: `src/features/routing/navigationReducer.ts`
@@ -1267,7 +1270,7 @@ git commit -m "feat: adiciona maquina de estados de navegacao"
 
 ---
 
-## Tarefa 8: Hook de Planejamento de Rota (useRoute)
+## Task 8: Hook de Planejamento de Rota (useRoute)
 
 **Arquivos:**
 - Criar: `src/features/routing/useRoute.ts`
@@ -1379,7 +1382,7 @@ git commit -m "feat: adiciona hook de planejamento de rota"
 
 ---
 
-## Tarefa 9: Hook e Componente de Mapa (Mapbox GL)
+## Task 9: Hook e Componente de Mapa (Mapbox GL)
 
 **Arquivos:**
 - Criar: `src/features/map/useMapboxMap.ts`
@@ -1614,7 +1617,7 @@ git commit -m "feat: adiciona hook e componente de mapa com Mapbox GL"
 
 ---
 
-## Tarefa 10: Componente de Busca (SearchBar)
+## Task 10: Componente de Busca (SearchBar)
 
 **Arquivos:**
 - Criar: `src/components/SearchBar.tsx`
@@ -1733,7 +1736,7 @@ git commit -m "feat: adiciona componente de busca de destino"
 
 ---
 
-## Tarefa 11: Componente de Instruções de Rota
+## Task 11: Componente de Instruções de Rota
 
 **Arquivos:**
 - Criar: `src/components/RouteInstructions.tsx`
@@ -1836,7 +1839,7 @@ git commit -m "feat: adiciona componente de instrucoes da rota"
 
 ---
 
-## Tarefa 12: Componentes de Resumo e Erro
+## Task 12: Componentes de Resumo e Erro
 
 **Arquivos:**
 - Criar: `src/components/RouteSummary.tsx`
@@ -1950,7 +1953,7 @@ git commit -m "feat: adiciona componentes de resumo de rota e aviso de erro"
 
 ---
 
-## Tarefa 13: Integração Final (App.tsx)
+## Task 13: Integração Final (App.tsx)
 
 **Arquivos:**
 - Modificar: `src/App.tsx` (substitui o placeholder da Tarefa 1)
@@ -2053,7 +2056,7 @@ Esperado: FALHA — `App.tsx` ainda é o placeholder da Tarefa 1.
 - [ ] **Passo 3: Implementar `src/App.tsx`**
 
 ```tsx
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { MapView } from './components/MapView';
 import { SearchBar } from './components/SearchBar';
 import { RouteInstructions } from './components/RouteInstructions';
@@ -2079,14 +2082,31 @@ export function App() {
     if (state.status === 'navigating' && geolocation.position) {
       dispatch({ type: 'POSITION_UPDATED', position: geolocation.position });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geolocation.position, state.status]);
+
+  // Plans the route once per destination selection — immediately if origin is
+  // already known, or deferred until it arrives (covers picking a destination
+  // before the first GPS fix). Tracks the attempted destination by reference:
+  // state.destination only gets a new reference from SET_DESTINATION (once per
+  // user action), while state.origin gets a new reference on every GPS tick —
+  // keying off destination instead of origin avoids re-firing (and re-requesting
+  // Directions) on every position update while a route is in flight or failed.
+  const attemptedDestinationRef = useRef<typeof state.destination>(null);
+
+  useEffect(() => {
+    if (
+      state.origin &&
+      state.destination &&
+      !state.route &&
+      attemptedDestinationRef.current !== state.destination
+    ) {
+      attemptedDestinationRef.current = state.destination;
+      void planRoute(state.origin, state.destination, state.travelProfile);
+    }
+  }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
 
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
     dispatch({ type: 'SET_DESTINATION', destination: suggestion.coordinates });
-    if (state.origin) {
-      void planRoute(state.origin, suggestion.coordinates, state.travelProfile);
-    }
   };
 
   const handleStartNavigation = () => {
@@ -2157,7 +2177,7 @@ git commit -m "feat: integra busca, mapa, rota e navegacao no App"
 
 ---
 
-## Tarefa 14: Segurança — Variáveis de Ambiente e Headers
+## Task 14: Segurança — Variáveis de Ambiente e Headers
 
 **Arquivos:**
 - Criar: `vercel.json`
@@ -2214,7 +2234,7 @@ git commit -m "chore: adiciona headers de seguranca para o deploy na Vercel"
 
 ---
 
-## Tarefa 15: CI/CD (GitHub Actions)
+## Task 15: CI/CD (GitHub Actions)
 
 **Arquivos:**
 - Criar: `.github/workflows/ci.yml`
@@ -2229,7 +2249,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -2258,12 +2277,12 @@ git commit -m "ci: adiciona pipeline de lint, testes, build e audit"
 
 - [ ] **Passo 3: Push e verificação**
 
-Rodar: `git push origin main`
-Esperado: acessar a aba "Actions" do repositório no GitHub e confirmar que o workflow "CI" rodou e todos os passos ficaram verdes. Se algum passo falhar, corrigir o problema, commitar e dar push novamente antes de seguir para a próxima tarefa.
+Rodar: `git push -u origin HEAD` (empurra a branch atual, seja ela qual for — a implementação roda em uma branch de feature, não diretamente em `main`)
+Esperado: acessar a aba "Actions" do repositório no GitHub e confirmar que o workflow "CI" rodou e todos os passos ficaram verdes para essa branch. Se algum passo falhar, corrigir o problema, commitar e dar push novamente antes de seguir para a próxima tarefa.
 
 ---
 
-## Tarefa 16: README e Documentação Final
+## Task 16: README e Documentação Final
 
 **Arquivos:**
 - Criar: `README.md`
@@ -2389,7 +2408,7 @@ git commit -m "docs: adiciona README completo com setup, arquitetura e capturas 
 
 ---
 
-## Tarefa 17: Deploy na Vercel
+## Task 17: Deploy na Vercel
 
 **Arquivos:** nenhum arquivo de código — checklist manual de deploy.
 
@@ -2407,17 +2426,19 @@ No painel do Mapbox (https://account.mapbox.com/access-tokens/), editar o token 
 
 - [ ] **Passo 4: Disparar o deploy e verificar**
 
-Fazer o deploy (automático a partir do push em `main`, ou manual pelo painel). Acessar a URL pública gerada, testar o fluxo completo: permitir localização → buscar um destino → selecionar da lista → ver a rota e o resumo → clicar em "Iniciar navegação".
+A Vercel gera automaticamente um deploy de Preview a partir do push na branch de feature em uso; o deploy de Produção (domínio final) só é ativado após o merge dessa branch em `main`. Para verificar agora, usar a URL de Preview: testar o fluxo completo — permitir localização → buscar um destino → selecionar da lista → ver a rota e o resumo → clicar em "Iniciar navegação".
 
 - [ ] **Passo 5: Atualizar o README com o link ao vivo**
 
-Editar `README.md`, substituir o placeholder do link de demo pela URL real da Vercel.
+Editar `README.md`, substituir o placeholder do link de demo pela URL de Preview (ou de Produção, se o merge para `main` já tiver ocorrido).
 
 ```bash
 git add README.md
 git commit -m "docs: adiciona link do deploy ao vivo na Vercel"
-git push origin main
+git push
 ```
+
+**Nota:** esta tarefa exige acesso às contas da Vercel e do Mapbox — passos 1 a 3 devem ser feitos pelo usuário diretamente, não por um subagente implementador.
 
 ---
 
