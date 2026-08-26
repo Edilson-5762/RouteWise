@@ -1,5 +1,6 @@
 import type { Coordinates, PlaceSuggestion, Route, RouteStep, TravelProfile } from '../types';
 import { DF_ADMINISTRATIVE_REGIONS, type AdministrativeRegion } from '../data/dfAdministrativeRegions';
+import { normalize } from '../utils/text';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 // A antiga Geocoding API v5 (`/geocoding/v5/mapbox.places`) tem relevância
@@ -107,19 +108,6 @@ async function fetchSuggestions(
 
 const MAX_SUGGESTIONS = 8;
 const MIN_LOCAL_MATCH_QUERY_LENGTH = 3;
-
-const COMBINING_DIACRITICS_PATTERN = new RegExp(
-  `[${String.fromCharCode(0x0300)}-${String.fromCharCode(0x036f)}]`,
-  'g',
-);
-
-function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(COMBINING_DIACRITICS_PATTERN, '')
-    .toLowerCase()
-    .trim();
-}
 
 // Gazetteer local das Regiões Administrativas do DF (ver comentário no
 // arquivo de dados para o porquê): usado para preencher um gap real de dados
