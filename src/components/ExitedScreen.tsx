@@ -14,8 +14,8 @@ export function ExitedScreen({ onReturn }: ExitedScreenProps) {
       <LogOut size={48} className="text-muted" aria-hidden="true" />
       <h1 className="text-2xl font-bold">Você saiu do RouteWise</h1>
       <p className="max-w-xs text-muted">
-        Seu navegador não permite fechar esta aba automaticamente. Você já pode fechá-la pelo X
-        do navegador, ou continuar usando o app.
+        Seu navegador não permite fechar esta aba automaticamente. Você já pode fechá-la pelo X do
+        navegador, ou continuar usando o app.
       </p>
       <button
         type="button"

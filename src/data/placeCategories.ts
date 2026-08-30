@@ -13,14 +13,22 @@ export interface PlaceCategoryDefinition {
 // estabelecimento mais comuns em buscas de navegação no Brasil; não é uma
 // lista exaustiva de todas as categorias da Geoapify.
 export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
-  { keywords: ['farmacia'], geoapifyCategory: 'commercial.health_and_beauty.pharmacy', categoryLabel: 'Farmácia' },
+  {
+    keywords: ['farmacia'],
+    geoapifyCategory: 'commercial.health_and_beauty.pharmacy',
+    categoryLabel: 'Farmácia',
+  },
   { keywords: ['hospital'], geoapifyCategory: 'healthcare.hospital', categoryLabel: 'Hospital' },
   {
     keywords: ['clinica', 'posto de saude'],
     geoapifyCategory: 'healthcare.clinic_or_praxis',
     categoryLabel: 'Clínica',
   },
-  { keywords: ['restaurante'], geoapifyCategory: 'catering.restaurant', categoryLabel: 'Restaurante' },
+  {
+    keywords: ['restaurante'],
+    geoapifyCategory: 'catering.restaurant',
+    categoryLabel: 'Restaurante',
+  },
   { keywords: ['lanchonete'], geoapifyCategory: 'catering.fast_food', categoryLabel: 'Lanchonete' },
   { keywords: ['bar'], geoapifyCategory: 'catering.bar', categoryLabel: 'Bar' },
   {
@@ -28,7 +36,11 @@ export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
     geoapifyCategory: 'commercial.food_and_drink.bakery',
     categoryLabel: 'Padaria',
   },
-  { keywords: ['acougue'], geoapifyCategory: 'commercial.food_and_drink.butcher', categoryLabel: 'Açougue' },
+  {
+    keywords: ['acougue'],
+    geoapifyCategory: 'commercial.food_and_drink.butcher',
+    categoryLabel: 'Açougue',
+  },
   {
     // Além da palavra genérica "banco", inclui marcas de bancos conhecidas
     // no Brasil: sozinhas (ex.: "bradesco", sem a cidade junto), a busca por
@@ -42,7 +54,11 @@ export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
     geoapifyCategory: 'service.financial.bank',
     categoryLabel: 'Banco',
   },
-  { keywords: ['caixa eletronico'], geoapifyCategory: 'service.financial.atm', categoryLabel: 'Caixa eletrônico' },
+  {
+    keywords: ['caixa eletronico'],
+    geoapifyCategory: 'service.financial.atm',
+    categoryLabel: 'Caixa eletrônico',
+  },
   {
     keywords: ['posto de gasolina', 'posto de combustivel'],
     geoapifyCategory: 'service.vehicle.fuel',
@@ -53,22 +69,38 @@ export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
     geoapifyCategory: 'commercial.supermarket',
     categoryLabel: 'Supermercado',
   },
-  { keywords: ['shopping'], geoapifyCategory: 'commercial.shopping_mall', categoryLabel: 'Shopping' },
+  {
+    keywords: ['shopping'],
+    geoapifyCategory: 'commercial.shopping_mall',
+    categoryLabel: 'Shopping',
+  },
   { keywords: ['escola'], geoapifyCategory: 'education.school', categoryLabel: 'Escola' },
   { keywords: ['academia'], geoapifyCategory: 'sport.fitness.gym', categoryLabel: 'Academia' },
   { keywords: ['hotel'], geoapifyCategory: 'accommodation.hotel', categoryLabel: 'Hotel' },
-  { keywords: ['pousada'], geoapifyCategory: 'accommodation.guest_house', categoryLabel: 'Pousada' },
+  {
+    keywords: ['pousada'],
+    geoapifyCategory: 'accommodation.guest_house',
+    categoryLabel: 'Pousada',
+  },
   { keywords: ['delegacia'], geoapifyCategory: 'service.police', categoryLabel: 'Delegacia' },
   { keywords: ['correios'], geoapifyCategory: 'service.post.office', categoryLabel: 'Correios' },
   { keywords: ['cinema'], geoapifyCategory: 'entertainment.cinema', categoryLabel: 'Cinema' },
   { keywords: ['parque'], geoapifyCategory: 'leisure.park', categoryLabel: 'Parque' },
-  { keywords: ['barbearia'], geoapifyCategory: 'service.beauty.hairdresser', categoryLabel: 'Barbearia' },
+  {
+    keywords: ['barbearia'],
+    geoapifyCategory: 'service.beauty.hairdresser',
+    categoryLabel: 'Barbearia',
+  },
   {
     keywords: ['salao de estetica', 'salao de beleza'],
     geoapifyCategory: 'service.beauty.spa',
     categoryLabel: 'Salão de beleza',
   },
-  { keywords: ['orgao publico'], geoapifyCategory: 'office.government', categoryLabel: 'Órgão público' },
+  {
+    keywords: ['orgao publico'],
+    geoapifyCategory: 'office.government',
+    categoryLabel: 'Órgão público',
+  },
   // Categoria genérica: cobre qualquer estabelecimento comercial não listado
   // acima (a Geoapify aceita a categoria de nível superior "commercial" como
   // guarda-chuva de todas as suas subcategorias).

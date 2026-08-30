@@ -30,7 +30,8 @@ describe('searchPlacesByCategory', () => {
           {
             properties: {
               name: 'Farmácia do Trabalhador',
-              formatted: 'Farmácia do Trabalhador, SCS Quadra 1/2, Brasília - DF, 70317-900, Brasil',
+              formatted:
+                'Farmácia do Trabalhador, SCS Quadra 1/2, Brasília - DF, 70317-900, Brasil',
               lat: -15.7982984,
               lon: -47.8870928,
               place_id: 'place-1',

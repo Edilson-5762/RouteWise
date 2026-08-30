@@ -55,8 +55,6 @@ describe('useRoute', () => {
       await result.current.recalculateRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, 'driving');
     });
 
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'ROUTE_RECALCULATED' }),
-    );
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'ROUTE_RECALCULATED' }));
   });
 });

@@ -188,7 +188,12 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [{ steps: [] }],

@@ -80,7 +80,9 @@ describe('useNearbyPlacesMarkers', () => {
     const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
     const map = createFakeMap(BASE_CENTER, 15);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 15);
@@ -94,7 +96,9 @@ describe('useNearbyPlacesMarkers', () => {
     const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -112,7 +116,9 @@ describe('useNearbyPlacesMarkers', () => {
     const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -131,7 +137,9 @@ describe('useNearbyPlacesMarkers', () => {
     const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -149,12 +157,22 @@ describe('useNearbyPlacesMarkers', () => {
 
   it('cria um marcador por resultado, e remove todos ao receber uma nova lista', async () => {
     vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
-      { id: 'p1', placeName: "D'Casa Ferramentas, Rua 4", coordinates: { lat: -15.8306, lng: -48.0645 } },
-      { id: 'p2', placeName: 'Farmácia Popular, Rua 4', coordinates: { lat: -15.8307, lng: -48.0646 } },
+      {
+        id: 'p1',
+        placeName: "D'Casa Ferramentas, Rua 4",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
+      {
+        id: 'p2',
+        placeName: 'Farmácia Popular, Rua 4',
+        coordinates: { lat: -15.8307, lng: -48.0646 },
+      },
     ]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -178,11 +196,17 @@ describe('useNearbyPlacesMarkers', () => {
 
   it('remove os marcadores quando o zoom cai abaixo do mínimo', async () => {
     vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
-      { id: 'p1', placeName: "D'Casa Ferramentas, Rua 4", coordinates: { lat: -15.8306, lng: -48.0645 } },
+      {
+        id: 'p1',
+        placeName: "D'Casa Ferramentas, Rua 4",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
     ]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -199,7 +223,11 @@ describe('useNearbyPlacesMarkers', () => {
 
   it('chama onSelect com a sugestão ao "clicar" no elemento de um marcador', async () => {
     vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
-      { id: 'p1', placeName: "D'Casa Ferramentas, Rua 4", coordinates: { lat: -15.8306, lng: -48.0645 } },
+      {
+        id: 'p1',
+        placeName: "D'Casa Ferramentas, Rua 4",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
     ]);
     const map = createFakeMap(BASE_CENTER, 16);
     const onSelect = vi.fn();
@@ -224,7 +252,9 @@ describe('useNearbyPlacesMarkers', () => {
     const spy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([]);
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: false, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: false, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -237,7 +267,11 @@ describe('useNearbyPlacesMarkers', () => {
 
   it('remove os marcadores e o listener ao desmontar', async () => {
     vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
-      { id: 'p1', placeName: "D'Casa Ferramentas, Rua 4", coordinates: { lat: -15.8306, lng: -48.0645 } },
+      {
+        id: 'p1',
+        placeName: "D'Casa Ferramentas, Rua 4",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
     ]);
     const map = createFakeMap(BASE_CENTER, 16);
 
@@ -258,10 +292,14 @@ describe('useNearbyPlacesMarkers', () => {
 
   it('retenta no próximo moveend válido se a busca falhar (distância gate não é envenenada)', async () => {
     // Primeira busca falha (erro de rede, etc.)
-    let searchSpy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockRejectedValueOnce(new Error('Network error'));
+    let searchSpy = vi
+      .spyOn(geoapifyClient, 'searchNearbyPlaces')
+      .mockRejectedValueOnce(new Error('Network error'));
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     // Simula um moveend, a busca falha silenciosamente
     await act(async () => {
@@ -275,7 +313,11 @@ describe('useNearbyPlacesMarkers', () => {
     // Segunda busca no MESMO centro com sucesso — prova que a falha anterior
     // não foi contada como "busca completada" para fins de gating.
     searchSpy = vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValueOnce([
-      { id: 'p1', placeName: 'Farmácia Popular, Rua 4', coordinates: { lat: -15.8267, lng: -48.0654 } },
+      {
+        id: 'p1',
+        placeName: 'Farmácia Popular, Rua 4',
+        coordinates: { lat: -15.8267, lng: -48.0654 },
+      },
     ]);
 
     await act(async () => {
@@ -293,7 +335,9 @@ describe('useNearbyPlacesMarkers', () => {
       .mockRejectedValueOnce(new geoapifyClient.GeoapifyRequestError('rate limited', 429));
     const map = createFakeMap(BASE_CENTER, 16);
 
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);
@@ -358,7 +402,9 @@ describe('useNearbyPlacesMarkers', () => {
       .mockReturnValueOnce(secondPromise);
 
     const map = createFakeMap(BASE_CENTER, 16);
-    renderHook(() => useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }));
+    renderHook(() =>
+      useNearbyPlacesMarkers({ map: map as never, enabled: true, onSelect: vi.fn() }),
+    );
 
     await act(async () => {
       map.__simulateMoveEnd(BASE_CENTER, 16);

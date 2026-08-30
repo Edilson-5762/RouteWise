@@ -63,7 +63,11 @@ function createMarkerElement(place: GeocodingSuggestion): HTMLDivElement {
 // região (confirmado via Tilequery API — ver spec). Hook isolado de
 // `useMapboxMap` de propósito: aquele hook já reúne câmera, puck, rota e
 // marcador de destino, e não deveria crescer mais.
-export function useNearbyPlacesMarkers({ map, enabled, onSelect }: UseNearbyPlacesMarkersOptions): void {
+export function useNearbyPlacesMarkers({
+  map,
+  enabled,
+  onSelect,
+}: UseNearbyPlacesMarkersOptions): void {
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const lastFetchCenterRef = useRef<Coordinates | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

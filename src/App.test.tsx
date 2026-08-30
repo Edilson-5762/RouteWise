@@ -80,7 +80,11 @@ describe('App', () => {
 
   it('planeja uma rota assim que um destino é selecionado e mostra o resumo', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
@@ -129,7 +133,11 @@ describe('App', () => {
     });
 
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
@@ -192,7 +200,11 @@ describe('App', () => {
     });
 
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
 
     let resolveDirections:
@@ -262,7 +274,11 @@ describe('App', () => {
 
   it('mostra banner de erro quando o cálculo de rota falha, e o retry rechama getDirections', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     const getDirectionsSpy = vi
       .spyOn(mapboxClient, 'getDirections')
@@ -324,7 +340,11 @@ describe('App', () => {
 
   it('transiciona para a NavigationView em tela cheia ao iniciar a navegação', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
@@ -364,7 +384,11 @@ describe('App', () => {
 
   it('reaproveita a mesma instância do mapa Mapbox ao trocar de tela, em vez de recriá-la', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
@@ -427,7 +451,11 @@ describe('App', () => {
     });
 
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     const getDirectionsSpy = vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [
@@ -499,7 +527,11 @@ describe('App', () => {
     });
 
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
 
     const initialRoute = {
@@ -583,7 +615,11 @@ describe('App', () => {
     // que o repõe, já que `geolocation.position` nunca muda de referência) e
     // a segunda busca nunca conseguia planejar rota.
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     const getDirectionsSpy = vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
       geometry: [

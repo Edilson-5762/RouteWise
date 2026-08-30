@@ -147,7 +147,11 @@ describe('MapView', () => {
     nearbyMarkerElements.length = 0;
     moveEndHandler = null;
     vi.spyOn(geoapifyClient, 'searchNearbyPlaces').mockResolvedValue([
-      { id: 'p1', placeName: "D'Casa Ferramentas, Rua 4", coordinates: { lat: -15.8306, lng: -48.0645 } },
+      {
+        id: 'p1',
+        placeName: "D'Casa Ferramentas, Rua 4",
+        coordinates: { lat: -15.8306, lng: -48.0645 },
+      },
     ]);
     const onDestinationSelected = vi.fn();
 

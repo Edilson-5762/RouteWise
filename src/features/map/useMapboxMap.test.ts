@@ -602,7 +602,10 @@ describe('useMapboxMap', () => {
     );
 
     expect(addSourceMock).toHaveBeenCalled();
-    const [, config] = addSourceMock.mock.calls[0] as [string, { data: GeoJSON.Feature<GeoJSON.LineString> }];
+    const [, config] = addSourceMock.mock.calls[0] as [
+      string,
+      { data: GeoJSON.Feature<GeoJSON.LineString> },
+    ];
     const coordinates = config.data.geometry.coordinates;
     expect(coordinates[0]).toEqual([origin.lng, origin.lat]);
     expect(coordinates[1]).toEqual([sampleRoute.geometry[0].lng, sampleRoute.geometry[0].lat]);
@@ -630,7 +633,10 @@ describe('useMapboxMap', () => {
       }),
     );
 
-    const [, config] = addSourceMock.mock.calls[0] as [string, { data: GeoJSON.Feature<GeoJSON.LineString> }];
+    const [, config] = addSourceMock.mock.calls[0] as [
+      string,
+      { data: GeoJSON.Feature<GeoJSON.LineString> },
+    ];
     const coordinates = config.data.geometry.coordinates;
     expect(coordinates).toHaveLength(sampleRoute.geometry.length);
     expect(coordinates[0]).toEqual([sampleRoute.geometry[0].lng, sampleRoute.geometry[0].lat]);
@@ -806,13 +812,17 @@ describe('useMapboxMap', () => {
     );
 
     expect(
-      currentMarkerElement()?.querySelector('[data-testid="user-puck-icon"] svg')?.getAttribute('data-vehicle-avatar'),
+      currentMarkerElement()
+        ?.querySelector('[data-testid="user-puck-icon"] svg')
+        ?.getAttribute('data-vehicle-avatar'),
     ).toBe('car');
 
     rerender({ travelProfile: 'cycling' });
 
     expect(
-      currentMarkerElement()?.querySelector('[data-testid="user-puck-icon"] svg')?.getAttribute('data-vehicle-avatar'),
+      currentMarkerElement()
+        ?.querySelector('[data-testid="user-puck-icon"] svg')
+        ?.getAttribute('data-vehicle-avatar'),
     ).toBe('bicycle');
   });
 });

@@ -4,9 +4,5 @@ const COMBINING_DIACRITICS_PATTERN = new RegExp(
 );
 
 export function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(COMBINING_DIACRITICS_PATTERN, '')
-    .toLowerCase()
-    .trim();
+  return text.normalize('NFD').replace(COMBINING_DIACRITICS_PATTERN, '').toLowerCase().trim();
 }

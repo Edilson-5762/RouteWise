@@ -22,10 +22,7 @@ const MODIFIER_ICONS: Record<string, LucideIcon> = {
   uturn: RotateCw,
 };
 
-export function getManeuverIcon(
-  maneuverType: string,
-  maneuverModifier: string | null,
-): LucideIcon {
+export function getManeuverIcon(maneuverType: string, maneuverModifier: string | null): LucideIcon {
   if (maneuverType === 'arrive') {
     return Flag;
   }

@@ -142,11 +142,7 @@ describe('useGeolocation', () => {
   it('tenta de novo em modo impreciso quando a leitura de alta precisão falha, e obtém a posição', async () => {
     let callCount = 0;
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
-      (
-        success: PositionCallback,
-        error: PositionErrorCallback,
-        options?: PositionOptions,
-      ) => {
+      (success: PositionCallback, error: PositionErrorCallback, options?: PositionOptions) => {
         callCount += 1;
         if (options?.enableHighAccuracy) {
           error({ code: 2, message: 'unavailable' } as GeolocationPositionError);

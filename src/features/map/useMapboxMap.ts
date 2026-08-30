@@ -28,7 +28,9 @@ function buildRouteGeojson(route: Route, connectorOrigin: Coordinates | null): F
   const coordinates: [number, number][] = route.geometry.map((point) => [point.lng, point.lat]);
   const [firstLng, firstLat] = coordinates[0] ?? [];
   const isAlreadyAtOrigin =
-    connectorOrigin !== null && firstLng === connectorOrigin.lng && firstLat === connectorOrigin.lat;
+    connectorOrigin !== null &&
+    firstLng === connectorOrigin.lng &&
+    firstLat === connectorOrigin.lat;
 
   if (connectorOrigin && !isAlreadyAtOrigin) {
     coordinates.unshift([connectorOrigin.lng, connectorOrigin.lat]);

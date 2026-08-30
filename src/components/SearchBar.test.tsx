@@ -6,7 +6,11 @@ import * as geoapifyClient from '../services/geoapifyClient';
 describe('SearchBar', () => {
   it('mostra sugestões retornadas pela busca e chama onSelect com as coordenadas resolvidas', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     const onSelect = vi.fn();
 
@@ -30,7 +34,11 @@ describe('SearchBar', () => {
 
   it('fecha a lista de sugestões após selecionar uma opção', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: '1', placeName: 'Av. Paulista, São Paulo', coordinates: { lat: -23.5613, lng: -46.6564 } },
+      {
+        id: '1',
+        placeName: 'Av. Paulista, São Paulo',
+        coordinates: { lat: -23.5613, lng: -46.6564 },
+      },
     ]);
     const onSelect = vi.fn();
 

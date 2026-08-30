@@ -127,7 +127,10 @@ export async function searchPlaces(
   const response = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`);
 
   if (!response.ok) {
-    throw new GeoapifyRequestError(`Falha na busca de endereço: ${response.status}`, response.status);
+    throw new GeoapifyRequestError(
+      `Falha na busca de endereço: ${response.status}`,
+      response.status,
+    );
   }
 
   return toSuggestions((await response.json()) as GeoapifyResponse);

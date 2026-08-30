@@ -1,0 +1,13 @@
+# Normaliza quebras de linha: tudo que é texto entra no repositório como LF,
+# independente do sistema operacional de quem commita.
+* text=auto eol=lf
+
+# Arquivos binários — nunca aplicar conversão de EOL nem diff textual.
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.woff  binary
+*.woff2 binary

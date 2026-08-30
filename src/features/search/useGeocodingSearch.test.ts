@@ -48,10 +48,9 @@ describe('useGeocodingSearch', () => {
   it('rebusca quando a proximidade muda, mesmo com a mesma query', async () => {
     const spy = vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
 
-    const { rerender } = renderHook(
-      ({ proximity }) => useGeocodingSearch('São Paulo', proximity),
-      { initialProps: { proximity: null as { lat: number; lng: number } | null } },
-    );
+    const { rerender } = renderHook(({ proximity }) => useGeocodingSearch('São Paulo', proximity), {
+      initialProps: { proximity: null as { lat: number; lng: number } | null },
+    });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
@@ -68,12 +67,16 @@ describe('useGeocodingSearch', () => {
   });
 
   it('quando a query bate com uma categoria, busca em paralelo por categoria e por texto', async () => {
-    const categorySpy = vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([
-      { id: 'cat-1', placeName: 'Farmácia Genérica', coordinates: { lat: -15.8, lng: -47.9 } },
-    ]);
-    const textSpy = vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: 'text-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.81, lng: -47.91 } },
-    ]);
+    const categorySpy = vi
+      .spyOn(geoapifyClient, 'searchPlacesByCategory')
+      .mockResolvedValue([
+        { id: 'cat-1', placeName: 'Farmácia Genérica', coordinates: { lat: -15.8, lng: -47.9 } },
+      ]);
+    const textSpy = vi
+      .spyOn(geoapifyClient, 'searchPlaces')
+      .mockResolvedValue([
+        { id: 'text-1', placeName: 'Farmácia Popular', coordinates: { lat: -15.81, lng: -47.91 } },
+      ]);
 
     const { result } = renderHook(() => useGeocodingSearch('farmácia', { lat: -15.8, lng: -47.9 }));
 

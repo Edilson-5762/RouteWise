@@ -86,13 +86,16 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
   // Toda sugestão já chega com coordenadas — a Geoapify devolve tudo em uma
   // única chamada, sem uma segunda etapa de "retrieve" como a Search Box API
   // do Mapbox exigia.
-  const resolveSuggestion = useCallback(async (suggestion: PlaceSuggestion): Promise<GeocodingSuggestion> => {
-    return {
-      id: suggestion.id,
-      placeName: suggestion.placeName,
-      coordinates: suggestion.coordinates as Coordinates,
-    };
-  }, []);
+  const resolveSuggestion = useCallback(
+    async (suggestion: PlaceSuggestion): Promise<GeocodingSuggestion> => {
+      return {
+        id: suggestion.id,
+        placeName: suggestion.placeName,
+        coordinates: suggestion.coordinates as Coordinates,
+      };
+    },
+    [],
+  );
 
   return { suggestions, isLoading, error, resolveSuggestion };
 }

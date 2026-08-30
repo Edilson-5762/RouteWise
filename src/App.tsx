@@ -29,8 +29,12 @@ const MapView = lazy(() =>
 export function App() {
   const [state, dispatch] = useReducer(navigationReducer, initialNavigationState);
   const geolocation = useGeolocation();
-  const { planRoute, recalculateRoute, isLoading: isRouteLoading, error: routeError } =
-    useRoute(dispatch);
+  const {
+    planRoute,
+    recalculateRoute,
+    isLoading: isRouteLoading,
+    error: routeError,
+  } = useRoute(dispatch);
   const { theme, toggleTheme } = useTheme();
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });

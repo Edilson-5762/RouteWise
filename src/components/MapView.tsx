@@ -2,7 +2,13 @@ import { useRef } from 'react';
 import { LocateFixed } from 'lucide-react';
 import { useMapboxMap } from '../features/map/useMapboxMap';
 import { useNearbyPlacesMarkers } from '../features/places/useNearbyPlacesMarkers';
-import type { Coordinates, GeocodingSuggestion, MapChromeInsets, Route, TravelProfile } from '../types';
+import type {
+  Coordinates,
+  GeocodingSuggestion,
+  MapChromeInsets,
+  Route,
+  TravelProfile,
+} from '../types';
 
 interface MapViewProps {
   origin: Coordinates | null;

@@ -22,8 +22,7 @@ export function NavigationStatusBar({
   onExit,
   onExitApp,
 }: NavigationStatusBarProps) {
-  const speedKmh =
-    speedMetersPerSecond !== null ? Math.round(speedMetersPerSecond * 3.6) : null;
+  const speedKmh = speedMetersPerSecond !== null ? Math.round(speedMetersPerSecond * 3.6) : null;
 
   return (
     <div className="flex items-center justify-between gap-4 bg-surface px-4 py-3 text-surface-foreground shadow-[0_-4px_12px_rgba(0,0,0,0.1)]">
