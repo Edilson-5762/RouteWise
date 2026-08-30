@@ -252,7 +252,7 @@ app. Por isso:
   `.gitignore`); o repositório só tem `.env.example` com valores fictícios.
 - A proteção real é **restrição no provedor**:
   - **Mapbox** → painel de _access tokens_ → _URL restrictions_: adicionar o
-    domínio de produção (ex.: `https://routewise.vercel.app`) e
+    domínio de produção (ex.: `https://route-wise.vercel.app`) e
     `http://localhost:5173`.
   - **Geoapify** → painel do projeto → restrição por _domínio / referrer_ da
     mesma forma.
@@ -404,7 +404,7 @@ pasta `dist/` como estático e aplica os headers do [`vercel.json`](vercel.json)
 1. No painel do **Mapbox** e da **Geoapify**, adicionar o domínio final da
    Vercel às restrições de URL/referrer.
 2. Em [`index.html`](index.html), conferir se `og:url` e `og:image` apontam para
-   o domínio real (o padrão é `https://routewise.vercel.app`). Se for outro,
+   o domínio real (o padrão é `https://route-wise.vercel.app`). Se for outro,
    trocar as duas linhas.
 3. Colar o link numa conversa do WhatsApp para conferir o cartão de
    compartilhamento.
