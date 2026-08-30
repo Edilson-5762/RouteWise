@@ -77,7 +77,14 @@ navegação** a partir do zero, para entender como cada peça funciona por dentr
   até a próxima ação.
 - **Barra de status** com ETA, distância restante e velocidade atual.
 - **Instruções por voz** (Web Speech API), com controle para ligar/desligar.
-- **Recálculo automático da rota** ao desviar do trajeto.
+- **Recálculo automático da rota** ao desviar do trajeto: tenta de novo em
+  intervalo (com espera crescente entre falhas) até você reencontrar a rota;
+  após várias falhas seguidas, para e mostra um botão de "tentar de novo".
+- **Trava de tela** (Screen Wake Lock API) durante a navegação, para o celular
+  não bloquear e cortar o GPS — re-solicitada ao voltar do segundo plano.
+- **Retomada após descarte da aba**: se o sistema fechar a aba durante a
+  navegação (ex.: ligação longa), ela é restaurada de um snapshot em
+  `sessionStorage` ao reabrir, em vez de voltar à tela inicial.
 - **Tela de chegada** ao alcançar o destino.
 - Estilos de mapa dedicados para navegação **diurna e noturna**, seguindo o tema.
 
@@ -140,7 +147,11 @@ precisam vir sempre da rede.
 
 - Geolocation API (`watchPosition`) — posição, velocidade e heading
 - Web Speech API (`SpeechSynthesis`) — instruções por voz
+- Screen Wake Lock API (`navigator.wakeLock`) — mantém a tela ligada na navegação
+- Page Visibility API (`visibilitychange`) — re-solicita a trava de tela e
+  retoma o recálculo ao voltar do segundo plano
 - `localStorage` — locais salvos e preferência de tema
+- `sessionStorage` — snapshot da navegação para retomar após descarte da aba
 - Service Worker + Web App Manifest — PWA instalável
 - `matchMedia` — preferência de tema do sistema
 
@@ -182,9 +193,12 @@ src/
                    useNearbyPlacesMarkers.ts    # POIs no mapa (com debounce e backoff)
     routing/       navigationReducer.ts         # máquina de estados
                    useRoute.ts                  # cálculo e recálculo de rota
+                   useRouteRecalcOnDeviation.ts # recálculo repetido enquanto fora da rota
+                   navigationPersistence.ts     # snapshot em sessionStorage p/ retomar
     search/        useGeocodingSearch.ts        # autocomplete + busca por categoria
     theme/         useTheme.ts                  # modo claro/escuro persistido
     voice/         useVoiceGuidance.ts          # instruções por voz
+    wakelock/      useWakeLock.ts               # mantém a tela ligada na navegação
   services/         # Clientes HTTP tipados
     mapboxClient.ts     # mapa + Directions API
     geoapifyClient.ts   # endereços, categorias e lugares próximos
@@ -368,8 +382,9 @@ Configurações que reforçam a qualidade:
    modo de transporte (carro / a pé / bicicleta) se quiser.
 4. **Salve o destino** (opcional) com um nome, para virar atalho depois.
 5. **Inicie a navegação** — a tela vira modo condução: o mapa segue você, o
-   banner mostra a próxima manobra e a voz vai avisando. Se você sair da rota,
-   ela é recalculada sozinha.
+   banner mostra a próxima manobra e a voz vai avisando. A tela fica ligada
+   durante o trajeto. Se você sair da rota, ela é recalculada sozinha, tentando
+   de novo até você voltar à rota.
 6. **Chegou** — a tela de chegada confirma o fim do trajeto.
 
 Toque no botão de tema para alternar claro/escuro. Para instalar no celular, use

@@ -125,6 +125,31 @@ describe('navigationReducer', () => {
     expect(desviado.routeDeviated).toBe(true);
   });
 
+  it('só limpa routeDeviated abaixo de 25m — na faixa 25–50m mantém o estado (histérese)', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+    const desviado = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.01, lng: 1 }, // ~1100m: bem fora da rota
+    });
+    expect(desviado.routeDeviated).toBe(true);
+
+    const naFaixa = navigationReducer(desviado, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.0003, lng: 1 }, // ~33m: ainda não conta como "de volta"
+    });
+    expect(naFaixa.routeDeviated).toBe(true);
+
+    const deVolta = navigationReducer(naFaixa, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.0001, lng: 1 }, // ~11m: de volta à rota
+    });
+    expect(deVolta.routeDeviated).toBe(false);
+  });
+
   it('limpa routeDeviated quando uma rota recalculada chega', () => {
     const planned = navigationReducer(initialNavigationState, {
       type: 'ROUTE_PLANNED',

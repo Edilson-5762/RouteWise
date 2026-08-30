@@ -64,6 +64,7 @@ describe('App', () => {
   beforeEach(() => {
     mapConstructorSpy.mockClear();
     mapRemoveSpy.mockClear();
+    sessionStorage.clear();
     Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
@@ -510,15 +511,39 @@ describe('App', () => {
     });
   });
 
-  it('tenta recalcular a rota apenas uma vez por episódio de desvio quando o recálculo falha', async () => {
+  // Helpers para os testes de recálculo por desvio: montam uma navegação em
+  // andamento e devolvem o spy de getDirections e o setter de posição do GPS.
+  const routeStub = {
+    geometry: [
+      { lat: -23.5505, lng: -46.6333 },
+      { lat: -23.5613, lng: -46.6564 },
+    ],
+    steps: [
+      {
+        instruction: 'Siga em frente',
+        distanceMeters: 500,
+        durationSeconds: 60,
+        maneuverLocation: { lat: -23.5505, lng: -46.6333 },
+        maneuverType: 'continue' as const,
+        maneuverModifier: null,
+      },
+    ],
+    distanceMeters: 500,
+    durationSeconds: 60,
+  };
+
+  const spyGetDirections = () => vi.spyOn(mapboxClient, 'getDirections');
+  type GetDirectionsSpy = ReturnType<typeof spyGetDirections>;
+
+  async function startNavigation(
+    getDirectionsImpl: (spy: GetDirectionsSpy) => void,
+  ): Promise<{ sendPosition: PositionCallback; getDirectionsSpy: GetDirectionsSpy }> {
     let sendPosition: PositionCallback | null = null;
     Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           sendPosition = success;
-          success({
-            coords: { latitude: -23.5505, longitude: -46.6333 },
-          } as GeolocationPosition);
+          success({ coords: { latitude: -23.5505, longitude: -46.6333 } } as GeolocationPosition);
           return 1;
         }),
         clearWatch: vi.fn(),
@@ -534,77 +559,159 @@ describe('App', () => {
       },
     ]);
 
-    const initialRoute = {
-      geometry: [
-        { lat: -23.5505, lng: -46.6333 },
-        { lat: -23.5613, lng: -46.6564 },
-      ],
-      steps: [
-        {
-          instruction: 'Siga em frente',
-          distanceMeters: 500,
-          durationSeconds: 60,
-          maneuverLocation: { lat: -23.5505, lng: -46.6333 },
-          maneuverType: 'continue',
-          maneuverModifier: null,
-        },
-      ],
-      distanceMeters: 500,
-      durationSeconds: 60,
-    };
-
-    const getDirectionsSpy = vi
-      .spyOn(mapboxClient, 'getDirections')
-      // 1ª chamada: planejamento inicial. 2ª: recálculo automático que
-      // START_NAVIGATION dispara para atualizar a rota a partir da posição
-      // atual (ver navigationReducer.ts). Ambas bem-sucedidas, para isolar o
-      // cenário de falha no episódio de desvio testado abaixo.
-      .mockResolvedValueOnce(initialRoute)
-      .mockResolvedValueOnce(initialRoute)
-      .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
+    const getDirectionsSpy = spyGetDirections();
+    getDirectionsImpl(getDirectionsSpy);
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('Buscar destino'), {
-      target: { value: 'Paulista' },
-    });
-    const option = await screen.findByText('Av. Paulista, São Paulo');
-    fireEvent.click(option);
-
+    fireEvent.change(screen.getByLabelText('Buscar destino'), { target: { value: 'Paulista' } });
+    fireEvent.click(await screen.findByText('Av. Paulista, São Paulo'));
     await screen.findByText('Iniciar navegação');
     fireEvent.click(screen.getByText('Iniciar navegação'));
+    await screen.findByText('Siga em frente');
+    // 1ª chamada: planejamento. 2ª: recálculo que START_NAVIGATION dispara.
+    await waitFor(() => expect(getDirectionsSpy).toHaveBeenCalledTimes(2));
 
-    await waitFor(() => {
-      expect(screen.getByText('Siga em frente')).toBeInTheDocument();
-    });
-    await waitFor(() => {
-      expect(getDirectionsSpy).toHaveBeenCalledTimes(2);
+    return { sendPosition: sendPosition!, getDirectionsSpy };
+  }
+
+  const flush = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
     });
 
-    // Primeira posição desviada (bem longe da rota e do destino): dispara uma
-    // tentativa de recálculo, que falha.
+  it('recalcula repetidamente, em intervalo, enquanto o usuário continua fora da rota', async () => {
+    const { sendPosition, getDirectionsSpy } = await startNavigation((spy) => {
+      spy
+        .mockResolvedValueOnce(routeStub)
+        .mockResolvedValueOnce(routeStub)
+        .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
+    });
+
+    vi.useFakeTimers();
+
+    // Posição bem longe da rota: entra em desvio e dispara o recálculo imediato.
     act(() => {
-      sendPosition!({
-        coords: { latitude: -23.7, longitude: -46.9 },
-      } as GeolocationPosition);
+      sendPosition({ coords: { latitude: -23.7, longitude: -46.9 } } as GeolocationPosition);
+    });
+    await flush();
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
+
+    // Continua fora da rota: novas tentativas a cada intervalo (5s, depois maior).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(5);
+
+    vi.useRealTimers();
+  });
+
+  it('para de recalcular assim que o usuário volta para a rota', async () => {
+    const { sendPosition, getDirectionsSpy } = await startNavigation((spy) => {
+      spy
+        .mockResolvedValueOnce(routeStub)
+        .mockResolvedValueOnce(routeStub)
+        .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
     });
 
-    await waitFor(() => {
-      expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
-    });
-    await waitFor(() => {
-      expect(screen.getByText('Falha ao recalcular rota: 500')).toBeInTheDocument();
-    });
+    vi.useFakeTimers();
 
-    // Segunda posição desviada (ainda no mesmo episódio de desvio): não deve
-    // tentar recalcular de novo — o guard de "uma tentativa por desvio" segura.
     act(() => {
-      sendPosition!({
-        coords: { latitude: -23.71, longitude: -46.91 },
-      } as GeolocationPosition);
+      sendPosition({ coords: { latitude: -23.7, longitude: -46.9 } } as GeolocationPosition);
+    });
+    await flush();
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
+
+    // Volta para cima da rota (< 25m do primeiro ponto): o reducer limpa o
+    // desvio e o loop de recálculo para.
+    act(() => {
+      sendPosition({ coords: { latitude: -23.5505, longitude: -46.6333 } } as GeolocationPosition);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
     });
 
     expect(getDirectionsSpy).toHaveBeenCalledTimes(3);
+
+    vi.useRealTimers();
+  });
+
+  it('desiste após seis falhas seguidas e mostra o erro com botão de tentar de novo', async () => {
+    const { sendPosition, getDirectionsSpy } = await startNavigation((spy) => {
+      spy
+        .mockResolvedValueOnce(routeStub)
+        .mockResolvedValueOnce(routeStub)
+        .mockRejectedValue(new Error('Falha ao recalcular rota: 500'));
+    });
+
+    vi.useFakeTimers();
+
+    act(() => {
+      sendPosition({ coords: { latitude: -23.7, longitude: -46.9 } } as GeolocationPosition);
+    });
+    await flush();
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+    }
+
+    // 2 chamadas de setup + 6 tentativas de recálculo, e para.
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(8);
+    expect(screen.getByText('Falha ao recalcular rota: 500')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Tentar novamente'));
+    await flush();
+
+    expect(getDirectionsSpy).toHaveBeenCalledTimes(9);
+
+    vi.useRealTimers();
+  });
+
+  it('retoma uma navegação em andamento a partir do snapshot ao recarregar', async () => {
+    sessionStorage.setItem(
+      'routewise-nav-snapshot',
+      JSON.stringify({
+        savedAt: Date.now(),
+        placeName: 'Av. Paulista, São Paulo',
+        origin: { lat: -23.5505, lng: -46.6333 },
+        destination: { lat: -23.5613, lng: -46.6564 },
+        route: routeStub,
+        currentStepIndex: 0,
+        travelProfile: 'driving',
+      }),
+    );
+    vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue(routeStub);
+
+    render(<App />);
+
+    expect(await screen.findByText('Siga em frente')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Buscar destino')).not.toBeInTheDocument();
+  });
+
+  it('ignora um snapshot antigo e abre na tela de planejamento', async () => {
+    sessionStorage.setItem(
+      'routewise-nav-snapshot',
+      JSON.stringify({
+        savedAt: Date.now() - 31 * 60 * 1000,
+        placeName: 'Av. Paulista, São Paulo',
+        origin: { lat: -23.5505, lng: -46.6333 },
+        destination: { lat: -23.5613, lng: -46.6564 },
+        route: routeStub,
+        currentStepIndex: 0,
+        travelProfile: 'driving',
+      }),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByLabelText('Buscar destino')).toBeInTheDocument();
+    expect(screen.queryByText('Siga em frente')).not.toBeInTheDocument();
   });
 
   it('permite pesquisar um novo destino depois de sair da navegação pelo botão "X", mesmo com o GPS parado', async () => {

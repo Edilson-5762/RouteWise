@@ -3,6 +3,7 @@ import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
 import { ErrorBanner } from './ErrorBanner';
 import { useVoiceGuidance } from '../features/voice/useVoiceGuidance';
+import { useWakeLock } from '../features/wakelock/useWakeLock';
 import type { NavigationState } from '../types';
 
 interface NavigationViewProps {
@@ -32,6 +33,9 @@ export function NavigationView({
   const voice = useVoiceGuidance(currentStep?.instruction ?? null, {
     enabled: state.status === 'navigating',
   });
+  // Impede a tela de apagar durante o trajeto — sem isso o bloqueio automático
+  // do celular corta o GPS e, com ele, a detecção de desvio e o recálculo.
+  useWakeLock(state.status === 'navigating');
 
   if (state.status === 'arrived') {
     return <ArrivalScreen placeName={placeName} onDone={onArrivalDone} />;
