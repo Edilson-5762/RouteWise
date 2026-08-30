@@ -8,6 +8,16 @@ interface GeolocationState {
   headingDegrees: number | null;
   error: string | null;
   isLoading: boolean;
+  // Campos de diagnóstico (usados pelo painel `?debug=1`): `accuracyMeters` é o
+  // raio de erro da última leitura crua; `highAccuracyActive` diz se o watch
+  // atual está em modo GPS ou caiu para o modo impreciso (rede); os contadores
+  // separam "quantos callbacks o watch entregou" de "quantos passaram do filtro
+  // de ruído" — é o que distingue um GPS que não atualiza de um filtro rígido
+  // demais engolindo o movimento real.
+  accuracyMeters: number | null;
+  highAccuracyActive: boolean;
+  rawUpdateCount: number;
+  acceptedUpdateCount: number;
 }
 
 // Piso de tolerância para leituras sem `accuracy` reportado (a Geolocation
@@ -41,8 +51,15 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     headingDegrees: null,
     error: null,
     isLoading: true,
+    accuracyMeters: null,
+    highAccuracyActive: true,
+    rawUpdateCount: 0,
+    acceptedUpdateCount: 0,
   });
   const watchIdRef = useRef<number | null>(null);
+  const highAccuracyActiveRef = useRef(true);
+  const rawUpdateCountRef = useRef(0);
+  const acceptedUpdateCountRef = useRef(0);
   // Última posição aceita (distinta da última lida): o GPS reporta
   // coordenadas levemente diferentes a cada leitura mesmo com o
   // dispositivo parado, tipicamente dentro da própria margem de erro
@@ -57,6 +74,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+      highAccuracyActiveRef.current = highAccuracy;
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (result) => {
@@ -64,20 +82,24 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
             lat: result.coords.latitude,
             lng: result.coords.longitude,
           };
-          const deadbandMeters = Math.max(
-            Number.isFinite(result.coords.accuracy) ? result.coords.accuracy : 0,
-            MIN_POSITION_DEADBAND_METERS,
-          );
+          const accuracyMeters = Number.isFinite(result.coords.accuracy)
+            ? result.coords.accuracy
+            : null;
+          const deadbandMeters = Math.max(accuracyMeters ?? 0, MIN_POSITION_DEADBAND_METERS);
           const previous = lastAcceptedPositionRef.current;
           // Mantém a mesma referência de posição (em vez de um objeto novo
           // igual em valor) quando a leitura é ruído — isso também evita
           // reprocessamento a jusante (reducer, efeitos de câmera) que
           // dependem de `position` por referência.
-          const position =
-            previous && haversineDistanceMeters(previous, reading) < deadbandMeters
-              ? previous
-              : reading;
+          const isRealMovement =
+            !previous || haversineDistanceMeters(previous, reading) >= deadbandMeters;
+          const position = isRealMovement ? reading : previous;
           lastAcceptedPositionRef.current = position;
+
+          rawUpdateCountRef.current += 1;
+          if (isRealMovement) {
+            acceptedUpdateCountRef.current += 1;
+          }
 
           setState({
             position,
@@ -89,6 +111,10 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
             headingDegrees: Number.isFinite(result.coords.heading) ? result.coords.heading : null,
             error: null,
             isLoading: false,
+            accuracyMeters,
+            highAccuracyActive: highAccuracyActiveRef.current,
+            rawUpdateCount: rawUpdateCountRef.current,
+            acceptedUpdateCount: acceptedUpdateCountRef.current,
           });
         },
         onFail,
@@ -103,28 +129,39 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
 
   const startWatching = useCallback(() => {
     if (!navigator.geolocation) {
-      setState({
+      setState((prev) => ({
+        ...prev,
         position: null,
         speedMetersPerSecond: null,
         headingDegrees: null,
         error: 'Seu navegador não suporta geolocalização.',
         isLoading: false,
-      });
+      }));
       return;
     }
 
     lastAcceptedPositionRef.current = null;
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+    rawUpdateCountRef.current = 0;
+    acceptedUpdateCountRef.current = 0;
+    setState((prev) => ({
+      ...prev,
+      isLoading: true,
+      error: null,
+      rawUpdateCount: 0,
+      acceptedUpdateCount: 0,
+    }));
 
     const fail = (error: GeolocationPositionError) => {
       lastAcceptedPositionRef.current = null;
-      setState({
+      setState((prev) => ({
+        ...prev,
         position: null,
         speedMetersPerSecond: null,
         headingDegrees: null,
         error: errorMessageForCode(error.code),
         isLoading: false,
-      });
+        highAccuracyActive: highAccuracyActiveRef.current,
+      }));
     };
 
     // Primeira tentativa pede alta precisão (GPS). Em desktops/notebooks sem

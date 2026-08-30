@@ -200,6 +200,57 @@ describe('useGeolocation', () => {
     expect(navigator.geolocation.watchPosition).toHaveBeenCalledTimes(2);
   });
 
+  it('expõe accuracyMeters da leitura do GPS', async () => {
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 42 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+
+    const { result } = renderHook(() => useGeolocation());
+
+    await waitFor(() => {
+      expect(result.current.accuracyMeters).toBe(42);
+    });
+  });
+
+  it('conta em rawUpdateCount todo callback do watch, mesmo quando a leitura é filtrada como ruído', async () => {
+    let successCallback: PositionCallback | null = null;
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        successCallback = success;
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 30 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+
+    const { result } = renderHook(() => useGeolocation());
+
+    await waitFor(() => {
+      expect(result.current.rawUpdateCount).toBe(1);
+    });
+
+    // Duas leituras seguidas ~11m adiante: dentro dos 30m de precisão, viram
+    // ruído e NÃO movem `position` — mas ainda assim são callbacks do watch.
+    act(() => {
+      successCallback?.({
+        coords: { latitude: -23.5506, longitude: -46.6333, accuracy: 30 },
+      } as GeolocationPosition);
+      successCallback?.({
+        coords: { latitude: -23.5505, longitude: -46.6334, accuracy: 30 },
+      } as GeolocationPosition);
+    });
+
+    expect(result.current.rawUpdateCount).toBe(3);
+    expect(result.current.acceptedUpdateCount).toBe(1);
+    expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
+  });
+
   it('atualiza a posição quando o deslocamento excede a precisão informada pelo GPS', async () => {
     let successCallback: PositionCallback | null = null;
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
