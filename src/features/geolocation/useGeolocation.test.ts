@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useGeolocation } from './useGeolocation';
 
@@ -8,9 +8,14 @@ describe('useGeolocation', () => {
       value: {
         watchPosition: vi.fn(),
         clearWatch: vi.fn(),
+        getCurrentPosition: vi.fn(),
       },
       configurable: true,
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('define a posição em caso de sucesso da geolocalização', async () => {
@@ -249,6 +254,117 @@ describe('useGeolocation', () => {
     expect(result.current.rawUpdateCount).toBe(3);
     expect(result.current.acceptedUpdateCount).toBe(1);
     expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
+  });
+
+  it('continua atualizando a posição por polling quando o watch dispara só uma vez', async () => {
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        success({
+          coords: { latitude: -15.8, longitude: -48.0, accuracy: 2000 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+    let pollTick = 0;
+    (navigator.geolocation.getCurrentPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        pollTick += 1;
+        success({
+          coords: {
+            latitude: -15.8 + pollTick * 0.001, // ~111m por tick: movimento real
+            longitude: -48.0,
+            accuracy: 12,
+            speed: 1.5,
+          },
+        } as GeolocationPosition);
+      },
+    );
+
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useGeolocation());
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+
+    expect(navigator.geolocation.getCurrentPosition).toHaveBeenCalled();
+    expect(result.current.pollUpdateCount).toBeGreaterThan(0);
+    expect(result.current.position?.lat).not.toBe(-15.8);
+  });
+
+  it('o polling pede alta precisão e sem cache (maximumAge 0)', async () => {
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(() => 1);
+    (navigator.geolocation.getCurrentPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      () => {},
+    );
+
+    vi.useFakeTimers();
+    renderHook(() => useGeolocation());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(navigator.geolocation.getCurrentPosition).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      expect.objectContaining({ enableHighAccuracy: true, maximumAge: 0 }),
+    );
+  });
+
+  it('não congela um movimento real quando a precisão informada é ruim (teto do deadband)', async () => {
+    let successCallback: PositionCallback | null = null;
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        successCallback = success;
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 500 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+
+    const { result } = renderHook(() => useGeolocation());
+    await waitFor(() => {
+      expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
+    });
+
+    act(() => {
+      // ~33m ao norte: abaixo dos 500m de precisão informada, mas acima do teto
+      // de 25m — é movimento real e deve mover o puck.
+      successCallback?.({
+        coords: { latitude: -23.5502, longitude: -46.6333, accuracy: 500 },
+      } as GeolocationPosition);
+    });
+
+    expect(result.current.position).toEqual({ lat: -23.5502, lng: -46.6333 });
+  });
+
+  it('aceita a leitura na hora quando o GPS reporta velocidade de deslocamento', async () => {
+    let successCallback: PositionCallback | null = null;
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        successCallback = success;
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 30, speed: 0 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+
+    const { result } = renderHook(() => useGeolocation());
+    await waitFor(() => {
+      expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
+    });
+
+    act(() => {
+      // ~11m adiante, dentro dos 30m de precisão — mas o GPS reporta 3 m/s,
+      // então o aparelho está mesmo se movendo: aceita.
+      successCallback?.({
+        coords: { latitude: -23.5506, longitude: -46.6333, accuracy: 30, speed: 3 },
+      } as GeolocationPosition);
+    });
+
+    expect(result.current.position).toEqual({ lat: -23.5506, lng: -46.6333 });
   });
 
   it('atualiza a posição quando o deslocamento excede a precisão informada pelo GPS', async () => {

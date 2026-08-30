@@ -12,6 +12,7 @@ interface DebugPanelProps {
     highAccuracyActive: boolean;
     rawUpdateCount: number;
     acceptedUpdateCount: number;
+    pollUpdateCount: number;
     error: string | null;
   };
   navState: NavigationState;
@@ -30,6 +31,7 @@ export function DebugPanel({ geolocation, navState }: DebugPanelProps) {
     highAccuracyActive,
     rawUpdateCount,
     acceptedUpdateCount,
+    pollUpdateCount,
     error,
   } = geolocation;
 
@@ -43,7 +45,7 @@ export function DebugPanel({ geolocation, navState }: DebugPanelProps) {
     ['geo.error', error ? 'SIM' : 'não'],
     ['accuracy', `${fmt(accuracyMeters)} m`],
     ['hiAccuracy', highAccuracyActive ? 'sim' : 'NÃO (rede)'],
-    ['GPS bruto', String(rawUpdateCount)],
+    ['GPS bruto', `${rawUpdateCount} (poll ${pollUpdateCount})`],
     ['GPS aceito', String(acceptedUpdateCount)],
     ['speed', `${fmt(speedMetersPerSecond, 1)} m/s`],
     ['heading', fmt(headingDegrees)],
