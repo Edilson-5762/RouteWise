@@ -34,19 +34,15 @@ const MAX_POSITION_DEADBAND_METERS = 25;
 // leitura é aceita na hora, sem passar pelo filtro de ruído (~2,5 km/h).
 const MOVING_SPEED_THRESHOLD_MPS = 0.7;
 
-// Tempo máximo de espera por um primeiro fix antes de desistir dessa
-// tentativa (a API não define timeout por padrão, então sem isto uma
-// tentativa que nunca chama sucesso nem erro deixaria o app "carregando"
-// para sempre).
-const HIGH_ACCURACY_TIMEOUT_MS = 8000;
-const FALLBACK_TIMEOUT_MS = 15000;
-
 // De quanto em quanto tempo o app re-pede a posição por conta própria. Em
 // alguns aparelhos o `watchPosition` do Chrome entrega uma leitura e para de
-// disparar; esse polling ativo mantém as leituras chegando e é o que faz o
-// navegador "acordar" o GPS em vez de ficar num fix de rede.
+// disparar; esse polling ativo mantém as leituras chegando.
 const POLL_INTERVAL_MS = 2500;
-const POLL_TIMEOUT_MS = 10000;
+const POLL_TIMEOUT_MS = 12000;
+// Quantas falhas seguidas do polling (sem nenhuma posição ainda) até mostrar
+// o erro na tela. Antes disso o app espera — um fix de GPS "frio" leva de 30s
+// a 1 min, então falhar rápido demais é o que fazia o app cair para a rede.
+const POLL_FAILURES_BEFORE_ERROR = 4;
 
 function errorMessageForCode(code: number): string {
   // code 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
@@ -76,10 +72,12 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
   });
   const watchIdRef = useRef<number | null>(null);
   const pollIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const highAccuracyActiveRef = useRef(true);
   const watchUpdateCountRef = useRef(0);
   const pollUpdateCountRef = useRef(0);
   const acceptedUpdateCountRef = useRef(0);
+  // Falhas consecutivas do polling enquanto ainda não há nenhuma posição — só
+  // depois de algumas é que o erro vai para a tela (ver POLL_FAILURES_BEFORE_ERROR).
+  const pollFailuresRef = useRef(0);
   // Última posição aceita (distinta da última lida): o GPS reporta
   // coordenadas levemente diferentes a cada leitura mesmo com o
   // dispositivo parado, tipicamente dentro da própria margem de erro
@@ -125,6 +123,8 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     if (isRealMovement) {
       acceptedUpdateCountRef.current += 1;
     }
+    // Chegou posição — zera a contagem de falhas do polling.
+    pollFailuresRef.current = 0;
 
     setState((prev) => ({
       ...prev,
@@ -138,27 +138,41 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       error: null,
       isLoading: false,
       accuracyMeters,
-      highAccuracyActive: highAccuracyActiveRef.current,
+      // O app agora sempre pede alta precisão e nunca cai para o modo rede.
+      highAccuracyActive: true,
       rawUpdateCount: watchUpdateCountRef.current + pollUpdateCountRef.current,
       acceptedUpdateCount: acceptedUpdateCountRef.current,
       pollUpdateCount: pollUpdateCountRef.current,
     }));
   }, []);
 
+  const reportFatalError = useCallback((error: GeolocationPositionError) => {
+    lastAcceptedPositionRef.current = null;
+    setState((prev) => ({
+      ...prev,
+      position: null,
+      speedMetersPerSecond: null,
+      headingDegrees: null,
+      error: errorMessageForCode(error.code),
+      isLoading: false,
+    }));
+  }, []);
+
+  // Sempre em alta precisão, sem timeout e sem cair para o modo impreciso.
+  // O fallback antigo (`enableHighAccuracy: false` após 8s de timeout) era a
+  // causa do bug: num aparelho onde o primeiro fix de GPS demora, ele fixava
+  // o provedor de localização da página no modo rede e daí NADA — nem o
+  // polling em alta precisão — conseguia mais um fix de GPS. O Google Maps no
+  // navegador não faz esse downgrade e por isso funciona no mesmo aparelho.
   const watch = useCallback(
-    (highAccuracy: boolean, onFail: (error: GeolocationPositionError) => void) => {
+    (onFail: (error: GeolocationPositionError) => void) => {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
-      highAccuracyActiveRef.current = highAccuracy;
-
       watchIdRef.current = navigator.geolocation.watchPosition(
         (result) => applyReading(result, 'watch'),
         onFail,
-        {
-          enableHighAccuracy: highAccuracy,
-          timeout: highAccuracy ? HIGH_ACCURACY_TIMEOUT_MS : FALLBACK_TIMEOUT_MS,
-        },
+        { enableHighAccuracy: true, maximumAge: 0 },
       );
     },
     [applyReading],
@@ -177,21 +191,34 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     if (pollIdRef.current !== null) {
       clearInterval(pollIdRef.current);
     }
+    const PERMISSION_DENIED = 1;
     const tick = () => {
       navigator.geolocation.getCurrentPosition(
         (result) => applyReading(result, 'poll'),
-        () => {
-          // Erros do polling são silenciosos de propósito: um timeout ou
-          // "position unavailable" pontual aqui não deve apagar a última
-          // posição boa nem trocar a tela pelo banner de erro — quem trata
-          // falha de verdade (permissão negada, etc.) é o `watch`.
+        (error) => {
+          // Permissão negada é definitivo — mostra o erro na hora.
+          if (error.code === PERMISSION_DENIED) {
+            reportFatalError(error);
+            return;
+          }
+          // Timeout / indisponível: se já temos uma posição, ignora (é só um
+          // tick ruim). Se ainda não temos nenhuma, conta — e só depois de
+          // algumas falhas seguidas mostra o erro, para dar tempo de um fix
+          // de GPS frio chegar em vez de cair para a rede.
+          if (lastAcceptedPositionRef.current) {
+            return;
+          }
+          pollFailuresRef.current += 1;
+          if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_ERROR) {
+            reportFatalError(error);
+          }
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: POLL_TIMEOUT_MS },
       );
     };
     tick();
     pollIdRef.current = setInterval(tick, POLL_INTERVAL_MS);
-  }, [applyReading]);
+  }, [applyReading, reportFatalError]);
 
   const stopAll = useCallback(() => {
     if (watchIdRef.current !== null) {
@@ -222,6 +249,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     watchUpdateCountRef.current = 0;
     pollUpdateCountRef.current = 0;
     acceptedUpdateCountRef.current = 0;
+    pollFailuresRef.current = 0;
     setState((prev) => ({
       ...prev,
       isLoading: true,
@@ -231,36 +259,18 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       pollUpdateCount: 0,
     }));
 
-    const fail = (error: GeolocationPositionError) => {
-      lastAcceptedPositionRef.current = null;
-      setState((prev) => ({
-        ...prev,
-        position: null,
-        speedMetersPerSecond: null,
-        headingDegrees: null,
-        error: errorMessageForCode(error.code),
-        isLoading: false,
-        highAccuracyActive: highAccuracyActiveRef.current,
-      }));
-    };
-
-    // Primeira tentativa do watch pede alta precisão (GPS). Em desktops sem
-    // sensor de GPS isso frequentemente falha com POSITION_UNAVAILABLE (ou
-    // estoura o timeout) mesmo com a permissão concedida — nesses casos vale
-    // tentar de novo em modo impreciso (rede/Wi-Fi). Uma permissão negada
-    // (code 1) não se resolve tentando de novo, então vai direto para o erro.
+    // Só a permissão negada é definitiva no watch. Timeout / indisponível são
+    // ignorados aqui — o polling continua tentando (e, se realmente nada vier,
+    // é ele quem mostra o erro depois de algumas falhas).
     const PERMISSION_DENIED = 1;
-    watch(true, (error) => {
+    watch((error) => {
       if (error.code === PERMISSION_DENIED) {
-        fail(error);
-        return;
+        reportFatalError(error);
       }
-      watch(false, fail);
     });
 
-    // O polling roda em paralelo ao watch, sempre em alta precisão.
     startPolling();
-  }, [watch, startPolling, stopAll]);
+  }, [watch, startPolling, stopAll, reportFatalError]);
 
   useEffect(() => {
     start();

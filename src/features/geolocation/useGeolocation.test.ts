@@ -144,19 +144,19 @@ describe('useGeolocation', () => {
     expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
   });
 
-  it('tenta de novo em modo impreciso quando a leitura de alta precisão falha, e obtém a posição', async () => {
-    let callCount = 0;
+  it('nunca cai para o modo impreciso — só pede watchPosition em alta precisão', async () => {
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
-      (success: PositionCallback, error: PositionErrorCallback, options?: PositionOptions) => {
-        callCount += 1;
-        if (options?.enableHighAccuracy) {
-          error({ code: 2, message: 'unavailable' } as GeolocationPositionError);
-        } else {
-          success({
-            coords: { latitude: -23.5505, longitude: -46.6333 },
-          } as GeolocationPosition);
-        }
-        return callCount;
+      (_success: PositionCallback, error: PositionErrorCallback) => {
+        // Alta precisão falha por indisponibilidade (fix de GPS ainda "frio").
+        error({ code: 2, message: 'unavailable' } as GeolocationPositionError);
+        return 1;
+      },
+    );
+    (navigator.geolocation.getCurrentPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 10 },
+        } as GeolocationPosition);
       },
     );
 
@@ -165,11 +165,17 @@ describe('useGeolocation', () => {
     await waitFor(() => {
       expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
     });
+    // Chamado só uma vez, e nunca com enableHighAccuracy: false.
+    expect(navigator.geolocation.watchPosition).toHaveBeenCalledTimes(1);
+    expect(navigator.geolocation.watchPosition).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ enableHighAccuracy: false }),
+    );
     expect(result.current.error).toBeNull();
-    expect(callCount).toBe(2);
   });
 
-  it('não tenta modo impreciso quando a permissão é negada, e usa a mensagem de permissão', async () => {
+  it('mostra o erro de permissão negada na hora, sem tentar de novo', async () => {
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
       (_success: PositionCallback, error: PositionErrorCallback) => {
         error({ code: 1, message: 'denied' } as GeolocationPositionError);
@@ -187,22 +193,35 @@ describe('useGeolocation', () => {
     expect(navigator.geolocation.watchPosition).toHaveBeenCalledTimes(1);
   });
 
-  it('usa a mensagem de serviço de localização quando as duas tentativas falham com posição indisponível', async () => {
+  it('mostra o erro só depois de várias falhas seguidas do polling sem nenhuma posição', async () => {
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
       (_success: PositionCallback, error: PositionErrorCallback) => {
         error({ code: 2, message: 'unavailable' } as GeolocationPositionError);
         return 1;
       },
     );
+    (navigator.geolocation.getCurrentPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (_success: PositionCallback, error: PositionErrorCallback) => {
+        error({ code: 2, message: 'unavailable' } as GeolocationPositionError);
+      },
+    );
 
+    vi.useFakeTimers();
     const { result } = renderHook(() => useGeolocation());
 
-    await waitFor(() => {
-      expect(result.current.error).toBe(
-        'Não foi possível determinar sua localização. Verifique se o serviço de localização do sistema está ativado e tente novamente.',
-      );
+    // Uma única falha do polling ainda não mostra erro.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
     });
-    expect(navigator.geolocation.watchPosition).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+
+    // Depois de 4 falhas seguidas, o erro aparece.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(result.current.error).toBe(
+      'Não foi possível determinar sua localização. Verifique se o serviço de localização do sistema está ativado e tente novamente.',
+    );
   });
 
   it('expõe accuracyMeters da leitura do GPS', async () => {
