@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
@@ -37,8 +38,35 @@ export function NavigationView({
   // do celular corta o GPS e, com ele, a detecção de desvio e o recálculo.
   useWakeLock(state.status === 'navigating');
 
+  // Aviso de chegada por voz — uma vez só, e respeitando o mudo da navegação.
+  // O lado ("à sua direita/esquerda") vem da geometria (ver `arrivalSide` no
+  // navigationReducer): direção de chegada vs. direção do pino.
+  const spokeArrivalRef = useRef(false);
+  useEffect(() => {
+    if (state.status !== 'arrived') {
+      spokeArrivalRef.current = false;
+      return;
+    }
+    if (spokeArrivalRef.current) {
+      return;
+    }
+    spokeArrivalRef.current = true;
+    if (voice.isMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+    const phrase =
+      state.arrivalSide === 'right'
+        ? 'Você chegou ao seu destino. Ele fica à sua direita.'
+        : state.arrivalSide === 'left'
+          ? 'Você chegou ao seu destino. Ele fica à sua esquerda.'
+          : 'Você chegou ao seu destino.';
+    const utterance = new SpeechSynthesisUtterance(phrase);
+    utterance.lang = 'pt-BR';
+    window.speechSynthesis.speak(utterance);
+  }, [state.status, state.arrivalSide, voice.isMuted]);
+
   if (state.status === 'arrived') {
-    return <ArrivalScreen placeName={placeName} onDone={onArrivalDone} />;
+    return <ArrivalScreen placeName={placeName} side={state.arrivalSide} onDone={onArrivalDone} />;
   }
 
   if (!state.route || !currentStep) {
@@ -65,7 +93,10 @@ export function NavigationView({
     // avisos, barra de status) precisa reativar pointer-events-auto para si.
     <div className="relative flex h-screen flex-col pointer-events-none">
       <div className="pointer-events-auto">
-        <ManeuverBanner step={currentStep} />
+        <ManeuverBanner
+          step={currentStep}
+          distanceToManeuverMeters={state.distanceToManeuverMeters}
+        />
       </div>
       {isRecalculating && (
         <p

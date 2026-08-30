@@ -216,7 +216,7 @@ describe('useMapboxMap', () => {
     rerender({ isNavigating: true, headingDegrees: 120 });
 
     expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
-      expect.objectContaining({ pitch: 60, bearing: 120, zoom: 18 }),
+      expect.objectContaining({ pitch: 60, bearing: 120, zoom: 19 }),
     );
   });
 
@@ -462,7 +462,7 @@ describe('useMapboxMap', () => {
 
     expect(result.current.isFollowingUser).toBe(true);
     expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
-      expect.objectContaining({ pitch: 60, bearing: 90, zoom: 18 }),
+      expect.objectContaining({ pitch: 60, bearing: 90, zoom: 19 }),
     );
   });
 

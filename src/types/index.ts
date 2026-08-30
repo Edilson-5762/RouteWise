@@ -41,6 +41,10 @@ export interface Route {
 
 export type NavigationStatus = 'idle' | 'routePlanned' | 'navigating' | 'arrived';
 
+// De que lado da via o destino ficou, em relação à direção de chegada — usado
+// no aviso de voz e na tela de chegada ("seu destino fica à direita").
+export type ArrivalSide = 'left' | 'right' | 'ahead';
+
 export interface NavigationState {
   status: NavigationStatus;
   origin: Coordinates | null;
@@ -49,6 +53,14 @@ export interface NavigationState {
   currentStepIndex: number;
   travelProfile: TravelProfile;
   routeDeviated: boolean;
+  // Índice do segmento da rota em que o usuário está (monotônico) — limita a
+  // janela de busca da projeção para uma rota que passa perto de si mesma não
+  // confundir a detecção de desvio.
+  routeProgressIndex: number;
+  // Metros que ainda faltam até a próxima manobra (cai conforme você se
+  // aproxima). `null` antes do primeiro fix de progresso.
+  distanceToManeuverMeters: number | null;
+  arrivalSide: ArrivalSide;
 }
 
 export interface SavedPlace {

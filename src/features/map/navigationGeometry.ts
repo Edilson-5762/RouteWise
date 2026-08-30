@@ -1,6 +1,11 @@
 import type { Feature, LineString } from 'geojson';
 import type { Coordinates, Route } from '../../types';
-import { findNearestPointIndex } from '../../utils/distance';
+import { bearingBetween, findNearestPointIndex } from '../../utils/distance';
+
+// Reexportado daqui por compatibilidade: a implementação canônica agora vive em
+// `utils/distance` (também usada pelo navigationReducer, que não deve depender
+// da camada de mapa).
+export { bearingBetween };
 
 function lineFeature(coordinates: [number, number][]): Feature<LineString> {
   return {
@@ -54,19 +59,3 @@ export function buildNavigationRouteGeojson(
   return lineFeature(ahead);
 }
 
-// Azimute (0–360°, 0 = norte, 90 = leste) de `from` para `to`. Usado para
-// girar a câmera na direção de deslocamento quando o GPS não reporta `heading`
-// (parado ou andando devagar) — é o que dá a visão "no capô".
-export function bearingBetween(from: Coordinates, to: Coordinates): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const toDeg = (rad: number) => (rad * 180) / Math.PI;
-
-  const lat1 = toRad(from.lat);
-  const lat2 = toRad(to.lat);
-  const dLng = toRad(to.lng - from.lng);
-
-  const y = Math.sin(dLng) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-
-  return (toDeg(Math.atan2(y, x)) + 360) % 360;
-}

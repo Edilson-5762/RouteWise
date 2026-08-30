@@ -4,7 +4,7 @@ import mapboxgl from 'mapbox-gl';
 import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../../types';
 import { getPuckIconMarkup } from '../../utils/vehicleAvatar';
 import { formatSpeedKmh } from '../../utils/format';
-import { haversineDistanceMeters } from '../../utils/distance';
+import { haversineDistanceMeters, signedBearingDelta } from '../../utils/distance';
 import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
@@ -20,14 +20,18 @@ const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
 const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
 // Zoom/pitch da câmera de condução — visão "no capô", bem de perto.
-const NAV_ZOOM = 18;
+const NAV_ZOOM = 19;
 const NAV_PITCH = 60;
-// Desloca a câmera para o puck ficar no terço de baixo da tela (sobra mais
-// trajeto visível à frente), em fração da altura do container.
-const NAV_PUCK_VERTICAL_OFFSET_RATIO = 0.2;
+// Desloca a câmera para o puck ficar bem na parte de baixo da tela (sobra o
+// máximo de trajeto visível à frente), em fração da altura do container.
+const NAV_PUCK_VERTICAL_OFFSET_RATIO = 0.36;
 // Deslocamento mínimo entre dois fixes para deles derivar uma direção de
 // deslocamento confiável (abaixo disso é ruído de GPS parado).
 const TRAVEL_BEARING_MIN_METERS = 4;
+// Suavização exponencial da rotação da câmera: a cada tick de GPS ela caminha
+// só esta fração do caminho até a direção-alvo, então uma curva vira um giro
+// gradual em vez de um "tranco". Menor = mais suave (e mais lento pra reagir).
+const CAMERA_BEARING_SMOOTHING = 0.4;
 // Depois de um gesto do usuário durante a navegação, quanto tempo até a câmera
 // voltar a seguir sozinha (igual Waze).
 const RESUME_FOLLOW_DELAY_MS = 4000;
@@ -181,6 +185,9 @@ export function useMapboxMap({
   // quando o GPS não reporta `heading`.
   const lastCameraPositionRef = useRef<Coordinates | null>(null);
   const lastTravelBearingRef = useRef<number | null>(null);
+  // Direção da câmera após a suavização (ver CAMERA_BEARING_SMOOTHING) — é ela
+  // que a câmera realmente usa, aproximando-se da direção-alvo aos poucos.
+  const smoothedBearingRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -505,16 +512,32 @@ export function useMapboxMap({
       }
       lastCameraPositionRef.current = position;
 
-      const bearing = lastTravelBearingRef.current ?? headingDegrees ?? map.getBearing();
+      // Direção-alvo: prioriza o heading real do GPS (já suavizado pelo
+      // aparelho e disponível só em movimento); sem ele, a direção derivada de
+      // dois fixes; por último, mantém a direção atual do mapa. Antes a
+      // ordem começava pela direção derivada de dois fixes — que, quando o GPS
+      // entregava um lote atrasado, dava um giro de ~90° de uma vez ("tranco").
+      const targetBearing = headingDegrees ?? lastTravelBearingRef.current ?? map.getBearing();
+
+      // Primeira volta encaixa direto na direção-alvo; nas seguintes, caminha
+      // só CAMERA_BEARING_SMOOTHING do caminho até ela — giro gradual.
+      const previousBearing = smoothedBearingRef.current ?? targetBearing;
+      const smoothedBearing =
+        (previousBearing +
+          signedBearingDelta(previousBearing, targetBearing) * CAMERA_BEARING_SMOOTHING +
+          360) %
+        360;
+      smoothedBearingRef.current = smoothedBearing;
+
       const offsetY = (containerRef.current?.clientHeight ?? 0) * NAV_PUCK_VERTICAL_OFFSET_RATIO;
 
       map.easeTo({
         center: [position.lng, position.lat],
         zoom: NAV_ZOOM,
         pitch: NAV_PITCH,
-        bearing,
+        bearing: smoothedBearing,
         offset: [0, offsetY],
-        duration: 500,
+        duration: 700,
       });
     },
     [headingDegrees, containerRef],
@@ -534,6 +557,7 @@ export function useMapboxMap({
     } else {
       lastCameraPositionRef.current = null;
       lastTravelBearingRef.current = null;
+      smoothedBearingRef.current = null;
       map.easeTo({ pitch: 0, bearing: 0, offset: [0, 0], duration: 500 });
     }
   }, [origin, isNavigating, headingDegrees, isFollowingUser, driveCameraTo]);

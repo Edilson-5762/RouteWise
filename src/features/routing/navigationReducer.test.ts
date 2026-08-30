@@ -88,7 +88,7 @@ describe('navigationReducer', () => {
     expect(voltouAtras.currentStepIndex).toBe(1);
   });
 
-  it('transiciona para arrived quando a posição fica a menos de 30m do destino', () => {
+  it('transiciona para arrived quando a posição fica junto ao pino do destino', () => {
     const routeToClose: Route = {
       ...sampleRoute,
       geometry: [
@@ -110,7 +110,74 @@ describe('navigationReducer', () => {
     expect(chegou.status).toBe('arrived');
   });
 
-  it('marca routeDeviated quando a posição fica a mais de 50m da rota', () => {
+  it('transiciona para arrived ao completar a rota mesmo com o GPS a algumas dezenas de metros do pino', () => {
+    // O sintoma relatado: a navegação "finaliza no meio da rua" quando o GPS
+    // não bate no ponto exato do pino. Agora, se já percorreu a rota inteira e
+    // está na região do destino, conta como chegada.
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const chegou = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 },
+    });
+
+    expect(chegou.status).toBe('arrived');
+  });
+
+  it('define arrivalSide conforme a direção de chegada vs. a direção do pino', () => {
+    const base = navigationReducer(initialNavigationState, {
+      type: 'SET_ORIGIN',
+      origin: { lat: 0, lng: 2.99 },
+    });
+    const comDireita = navigationReducer(
+      { ...base, destination: { lat: -0.0001, lng: 3 } }, // pino ao sul, chegando a leste → direita
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navDireita = navigationReducer(comDireita, { type: 'START_NAVIGATION' });
+    const chegouDireita = navigationReducer(navDireita, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 },
+    });
+    expect(chegouDireita.status).toBe('arrived');
+    expect(chegouDireita.arrivalSide).toBe('right');
+
+    const comEsquerda = navigationReducer(
+      { ...base, destination: { lat: 0.0001, lng: 3 } }, // pino ao norte → esquerda
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navEsquerda = navigationReducer(comEsquerda, { type: 'START_NAVIGATION' });
+    const chegouEsquerda = navigationReducer(navEsquerda, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 },
+    });
+    expect(chegouEsquerda.arrivalSide).toBe('left');
+  });
+
+  it('reporta distanceToManeuverMeters e ele diminui conforme você se aproxima da manobra', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const longe = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 0.5 },
+    });
+    const perto = navigationReducer(longe, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 0.9 },
+    });
+
+    expect(longe.distanceToManeuverMeters).toBeGreaterThan(0);
+    expect(perto.distanceToManeuverMeters).toBeLessThan(longe.distanceToManeuverMeters as number);
+  });
+
+  it('marca routeDeviated quando a posição fica bem longe da rota', () => {
     const planned = navigationReducer(initialNavigationState, {
       type: 'ROUTE_PLANNED',
       route: sampleRoute,
@@ -125,7 +192,7 @@ describe('navigationReducer', () => {
     expect(desviado.routeDeviated).toBe(true);
   });
 
-  it('só limpa routeDeviated abaixo de 25m — na faixa 25–50m mantém o estado (histérese)', () => {
+  it('só limpa routeDeviated abaixo do limite de "de volta" — na zona morta mantém o estado (histérese)', () => {
     const planned = navigationReducer(initialNavigationState, {
       type: 'ROUTE_PLANNED',
       route: sampleRoute,
