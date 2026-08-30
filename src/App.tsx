@@ -69,10 +69,24 @@ export function App() {
   const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });
   const [hasExitedApp, setHasExitedApp] = useState(false);
 
-  // Painel de diagnóstico ligado só com `?debug=1` na URL — some da UI normal.
+  // Painel de diagnóstico: ligado por `?debug` na URL (navegador) ou pela flag
+  // salva em localStorage. Abrir `?debug=1` grava a flag; `?debug=0` apaga —
+  // assim dá para ligar pelo navegador e o app instalado (mesmo domínio, mesmo
+  // localStorage) já abre com o painel, mesmo sem barra de endereço.
   const [debugEnabled] = useState(() => {
+    const STORAGE_KEY = 'routewise:debug';
     try {
-      return new URLSearchParams(window.location.search).has('debug');
+      const param = new URLSearchParams(window.location.search).get('debug');
+      if (param !== null) {
+        const on = param !== '0' && param !== 'false';
+        try {
+          localStorage.setItem(STORAGE_KEY, on ? '1' : '0');
+        } catch {
+          // sem localStorage — a flag vale só para esta aba
+        }
+        return on;
+      }
+      return localStorage.getItem(STORAGE_KEY) === '1';
     } catch {
       return false;
     }
