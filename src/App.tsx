@@ -3,6 +3,7 @@ import { PlanningView } from './components/PlanningView';
 import { NavigationView } from './components/NavigationView';
 import { ErrorBanner } from './components/ErrorBanner';
 import { ExitedScreen } from './components/ExitedScreen';
+import { DebugPanel } from './components/DebugPanel';
 import { useGeolocation } from './features/geolocation/useGeolocation';
 import { useRoute } from './features/routing/useRoute';
 import { useRouteRecalcOnDeviation } from './features/routing/useRouteRecalcOnDeviation';
@@ -67,6 +68,15 @@ export function App() {
   const [placeName, setPlaceName] = useState<string | null>(restoredSnapshot?.placeName ?? null);
   const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });
   const [hasExitedApp, setHasExitedApp] = useState(false);
+
+  // Painel de diagnóstico ligado só com `?debug=1` na URL — some da UI normal.
+  const [debugEnabled] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).has('debug');
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     if (geolocation.position) {
@@ -199,6 +209,10 @@ export function App() {
     </div>
   );
 
+  const debugLayer = debugEnabled ? (
+    <DebugPanel geolocation={geolocation} navState={state} />
+  ) : null;
+
   if (hasExitedApp) {
     return <ExitedScreen onReturn={() => setHasExitedApp(false)} />;
   }
@@ -207,6 +221,7 @@ export function App() {
     return (
       <>
         {mapLayer}
+        {debugLayer}
         <div className="relative flex h-screen items-center justify-center p-6">
           <ErrorBanner message={geolocation.error} onRetry={geolocation.retry} />
         </div>
@@ -218,6 +233,7 @@ export function App() {
     return (
       <>
         {mapLayer}
+        {debugLayer}
         <NavigationView
           state={state}
           placeName={placeName}
@@ -236,6 +252,7 @@ export function App() {
   return (
     <>
       {mapLayer}
+      {debugLayer}
       <PlanningView
         state={state}
         placeName={placeName}
