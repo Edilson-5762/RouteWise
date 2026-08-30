@@ -127,4 +127,34 @@ describe('NavigationView', () => {
     fireEvent.click(screen.getByText('Tentar novamente'));
     expect(onExit).toHaveBeenCalled();
   });
+
+  it('pede a trava de tela (wake lock) enquanto está navegando', async () => {
+    const request = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) });
+    Object.defineProperty(globalThis.navigator, 'wakeLock', {
+      value: { request },
+      configurable: true,
+    });
+
+    render(
+      <NavigationView
+        state={navigatingState}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={null}
+        isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
+        onExit={vi.fn()}
+        onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
+      />,
+    );
+    await Promise.resolve();
+
+    expect(request).toHaveBeenCalledWith('screen');
+
+    Object.defineProperty(globalThis.navigator, 'wakeLock', {
+      value: undefined,
+      configurable: true,
+    });
+  });
 });

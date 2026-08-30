@@ -24,15 +24,23 @@ export function useRoute(dispatch: Dispatch<NavigationAction>) {
     [dispatch],
   );
 
+  // Resolve para `true`/`false` (em vez de `void`) para o loop de recálculo por
+  // desvio em App.tsx saber se deve continuar tentando ou parar — nunca lança.
   const recalculateRoute = useCallback(
-    async (origin: Coordinates, destination: Coordinates, profile: TravelProfile) => {
+    async (
+      origin: Coordinates,
+      destination: Coordinates,
+      profile: TravelProfile,
+    ): Promise<boolean> => {
       setIsLoading(true);
       setError(null);
       try {
         const route = await getDirections(origin, destination, profile);
         dispatch({ type: 'ROUTE_RECALCULATED', route });
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro ao recalcular a rota.');
+        return false;
       } finally {
         setIsLoading(false);
       }

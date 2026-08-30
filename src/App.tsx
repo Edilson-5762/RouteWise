@@ -5,9 +5,36 @@ import { ErrorBanner } from './components/ErrorBanner';
 import { ExitedScreen } from './components/ExitedScreen';
 import { useGeolocation } from './features/geolocation/useGeolocation';
 import { useRoute } from './features/routing/useRoute';
+import { useRouteRecalcOnDeviation } from './features/routing/useRouteRecalcOnDeviation';
 import { useTheme } from './features/theme/useTheme';
 import { navigationReducer, initialNavigationState } from './features/routing/navigationReducer';
-import type { GeocodingSuggestion, MapChromeInsets } from './types';
+import {
+  loadNavigationSnapshot,
+  saveNavigationSnapshot,
+  clearNavigationSnapshot,
+  type NavigationSnapshot,
+} from './features/routing/navigationPersistence';
+import type { GeocodingSuggestion, MapChromeInsets, NavigationState } from './types';
+
+// Retoma uma navegação que estava em andamento quando a aba foi descartada
+// (ex.: ligação longa durante o trajeto). `routeDeviated: true` reaproveita o
+// recálculo por desvio para reancorar a rota na posição atual assim que o
+// primeiro fix de GPS chega.
+function buildInitialState(snapshot: NavigationSnapshot | null): NavigationState {
+  if (!snapshot) {
+    return initialNavigationState;
+  }
+  return {
+    ...initialNavigationState,
+    status: 'navigating',
+    origin: snapshot.origin,
+    destination: snapshot.destination,
+    route: snapshot.route,
+    currentStepIndex: snapshot.currentStepIndex,
+    travelProfile: snapshot.travelProfile,
+    routeDeviated: true,
+  };
+}
 
 // mapbox-gl é uma dependência pesada (~500KB+ minificado); carregá-la só
 // quando o mapa entra em tela evita bloquear o primeiro paint com JS que
@@ -27,7 +54,8 @@ const MapView = lazy(() =>
 );
 
 export function App() {
-  const [state, dispatch] = useReducer(navigationReducer, initialNavigationState);
+  const [restoredSnapshot] = useState(loadNavigationSnapshot);
+  const [state, dispatch] = useReducer(navigationReducer, restoredSnapshot, buildInitialState);
   const geolocation = useGeolocation();
   const {
     planRoute,
@@ -36,7 +64,7 @@ export function App() {
     error: routeError,
   } = useRoute(dispatch);
   const { theme, toggleTheme } = useTheme();
-  const [placeName, setPlaceName] = useState<string | null>(null);
+  const [placeName, setPlaceName] = useState<string | null>(restoredSnapshot?.placeName ?? null);
   const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });
   const [hasExitedApp, setHasExitedApp] = useState(false);
 
@@ -73,42 +101,28 @@ export function App() {
     }
   }, [state.origin, state.destination, state.route, state.travelProfile, planRoute]);
 
-  // Attempts a route recalculation at most once per deviation episode, mirroring
-  // attemptedDestinationRef above. state.routeDeviated stays true after a failed
-  // recalculateRoute call (it's only cleared by a successful ROUTE_RECALCULATED),
-  // so without this guard the effect would keep firing every render forever on
-  // failure. Resetting the ref whenever the guard condition is false (not
-  // deviated / not navigating / missing origin or destination) means the *next*
-  // deviation episode always gets its own fresh attempt.
-  const attemptedRecalcRef = useRef(false);
+  // Enquanto fora da rota, tenta recalcular repetidamente até o usuário voltar
+  // à rota (ver useRouteRecalcOnDeviation); desiste após algumas falhas
+  // seguidas e expõe `hasGivenUp` para a UI oferecer um retry manual.
+  const recalc = useRouteRecalcOnDeviation({
+    deviated: state.routeDeviated,
+    navigating: state.status === 'navigating',
+    origin: state.origin,
+    destination: state.destination,
+    profile: state.travelProfile,
+    recalculate: recalculateRoute,
+  });
 
+  // Snapshot da navegação em andamento — restaurado no boot por
+  // buildInitialState se a aba tiver sido descartada. Limpo assim que a
+  // navegação termina (chegada ou saída pelo "X").
   useEffect(() => {
-    if (
-      !state.routeDeviated ||
-      state.status !== 'navigating' ||
-      !state.origin ||
-      !state.destination
-    ) {
-      attemptedRecalcRef.current = false;
-      return;
+    if (state.status === 'navigating') {
+      saveNavigationSnapshot(state, placeName);
+    } else {
+      clearNavigationSnapshot();
     }
-    if (attemptedRecalcRef.current) {
-      return;
-    }
-    attemptedRecalcRef.current = true;
-    void recalculateRoute(state.origin, state.destination, state.travelProfile);
-  }, [
-    state.routeDeviated,
-    state.status,
-    state.origin,
-    state.destination,
-    state.travelProfile,
-    recalculateRoute,
-  ]);
-
-  const handleRetryRecalc = () => {
-    attemptedRecalcRef.current = false;
-  };
+  }, [state, placeName]);
 
   const handleDestinationSelected = (suggestion: GeocodingSuggestion) => {
     setPlaceName(suggestion.placeName);
@@ -208,9 +222,9 @@ export function App() {
           state={state}
           placeName={placeName}
           speedMetersPerSecond={geolocation.speedMetersPerSecond}
-          isRecalculating={state.routeDeviated && isRouteLoading}
-          routeError={state.routeDeviated && !isRouteLoading ? routeError : null}
-          onRetryRecalc={handleRetryRecalc}
+          isRecalculating={recalc.isRecalculating}
+          routeError={recalc.hasGivenUp ? routeError : null}
+          onRetryRecalc={recalc.retry}
           onExit={handleExitNavigation}
           onArrivalDone={handleExitNavigation}
           onExitApp={handleExitApp}

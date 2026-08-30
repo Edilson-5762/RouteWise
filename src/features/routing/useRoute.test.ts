@@ -57,4 +57,47 @@ describe('useRoute', () => {
 
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'ROUTE_RECALCULATED' }));
   });
+
+  it('recalculateRoute resolve para true quando tem sucesso', async () => {
+    vi.spyOn(mapboxClient, 'getDirections').mockResolvedValue({
+      geometry: [{ lat: 0, lng: 0 }],
+      steps: [],
+      distanceMeters: 100,
+      durationSeconds: 10,
+    });
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useRoute(dispatch));
+
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.recalculateRoute(
+        { lat: 0, lng: 0 },
+        { lat: 1, lng: 1 },
+        'driving',
+      );
+    });
+
+    expect(outcome).toBe(true);
+  });
+
+  it('recalculateRoute resolve para false quando falha, sem lançar', async () => {
+    vi.spyOn(mapboxClient, 'getDirections').mockRejectedValue(
+      new Error('Falha ao recalcular rota: 500'),
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useRoute(dispatch));
+
+    let outcome: boolean | undefined;
+    await act(async () => {
+      outcome = await result.current.recalculateRoute(
+        { lat: 0, lng: 0 },
+        { lat: 1, lng: 1 },
+        'driving',
+      );
+    });
+
+    expect(outcome).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('Falha ao recalcular rota: 500');
+  });
 });

@@ -3,6 +3,11 @@ import { findNearestPointIndex, haversineDistanceMeters } from '../../utils/dist
 
 const ARRIVAL_THRESHOLD_METERS = 30;
 const DEVIATION_THRESHOLD_METERS = 50;
+// Abaixo deste valor o app considera que o usuário reencontrou a rota e sai do
+// estado de desvio (parando o recálculo automático). É menor que o limite de
+// desvio de propósito: a faixa entre os dois é uma zona morta que impede o
+// estado de ficar oscilando quando a posição do GPS treme perto da linha.
+const BACK_ON_ROUTE_THRESHOLD_METERS = 25;
 
 export type NavigationAction =
   | { type: 'SET_ORIGIN'; origin: Coordinates }
@@ -83,11 +88,18 @@ export function navigationReducer(
       const progressRatio = nearestIndex / Math.max(state.route.geometry.length - 1, 1);
       const nextStepIndex = Math.min(Math.floor(progressRatio * stepCount), stepCount - 1);
 
+      let routeDeviated = state.routeDeviated;
+      if (distanceToRoute > DEVIATION_THRESHOLD_METERS) {
+        routeDeviated = true;
+      } else if (distanceToRoute < BACK_ON_ROUTE_THRESHOLD_METERS) {
+        routeDeviated = false;
+      }
+
       return {
         ...state,
         origin: action.position,
         currentStepIndex: Math.max(nextStepIndex, state.currentStepIndex),
-        routeDeviated: distanceToRoute > DEVIATION_THRESHOLD_METERS ? true : state.routeDeviated,
+        routeDeviated,
       };
     }
 
