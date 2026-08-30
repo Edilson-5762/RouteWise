@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sun, Moon, LogOut } from 'lucide-react';
 import { SearchBar } from './SearchBar';
 import { SavedPlacesShortcuts } from './SavedPlacesShortcuts';
@@ -8,7 +8,12 @@ import { useSavedPlaces } from '../features/places/useSavedPlaces';
 import { useElementHeight } from '../features/layout/useElementHeight';
 import { hasMapboxToken } from '../services/mapboxClient';
 import { hasGeoapifyApiKey } from '../services/geoapifyClient';
-import type { GeocodingSuggestion, MapChromeInsets, NavigationState, TravelProfile } from '../types';
+import type {
+  GeocodingSuggestion,
+  MapChromeInsets,
+  NavigationState,
+  TravelProfile,
+} from '../types';
 
 interface PlanningViewProps {
   state: NavigationState;
@@ -42,7 +47,6 @@ export function PlanningView({
   onExitApp,
 }: PlanningViewProps) {
   const { places, savePlace } = useSavedPlaces();
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Mede a altura real do cabeçalho (busca + banners, que variam de altura) e
   // do cartão de destino (some/aparece e muda de conteúdo) para que o mapa
@@ -117,11 +121,7 @@ export function PlanningView({
         )}
         <div className="flex items-center gap-2">
           <div className="flex-1">
-            <SearchBar
-              ref={searchInputRef}
-              onSelect={onDestinationSelected}
-              proximity={state.origin}
-            />
+            <SearchBar onSelect={onDestinationSelected} proximity={state.origin} />
           </div>
           <button
             type="button"
@@ -154,7 +154,6 @@ export function PlanningView({
                 coordinates: place.coordinates,
               })
             }
-            onAddNew={() => searchInputRef.current?.focus()}
           />
         )}
         {routeError && <ErrorBanner message={routeError} onRetry={onRetryRoute} />}

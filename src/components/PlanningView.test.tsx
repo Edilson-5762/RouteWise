@@ -180,30 +180,6 @@ describe('PlanningView', () => {
     setItemSpy.mockRestore();
   });
 
-  it('foca o campo de busca ao clicar em "Novo" nos atalhos de locais salvos', () => {
-    render(
-      <PlanningView
-        state={initialNavigationState}
-        placeName={null}
-        routeError={null}
-        isRouteLoading={false}
-        onDestinationSelected={vi.fn()}
-        onTravelProfileChange={vi.fn()}
-        onStartNavigation={vi.fn()}
-        onCancelRoute={vi.fn()}
-        onRetryRoute={vi.fn()}
-        theme="light"
-        onToggleTheme={vi.fn()}
-        onChromeInsetsChange={vi.fn()}
-        onExitApp={vi.fn()}
-      />,
-    );
-
-    fireEvent.click(screen.getByText('Novo'));
-
-    expect(screen.getByLabelText('Buscar destino')).toHaveFocus();
-  });
-
   it('chama onExitApp ao clicar em "Sair da página"', () => {
     const onExitApp = vi.fn();
 

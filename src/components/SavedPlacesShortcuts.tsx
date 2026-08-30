@@ -1,10 +1,9 @@
-import { Home, Briefcase, Plus, MapPin } from 'lucide-react';
+import { Home, Briefcase, MapPin } from 'lucide-react';
 import type { SavedPlace } from '../types';
 
 interface SavedPlacesShortcutsProps {
   places: SavedPlace[];
   onSelect: (place: SavedPlace) => void;
-  onAddNew: () => void;
 }
 
 function iconForLabel(label: string) {
@@ -13,7 +12,11 @@ function iconForLabel(label: string) {
   return MapPin;
 }
 
-export function SavedPlacesShortcuts({ places, onSelect, onAddNew }: SavedPlacesShortcutsProps) {
+export function SavedPlacesShortcuts({ places, onSelect }: SavedPlacesShortcutsProps) {
+  if (places.length === 0) {
+    return null;
+  }
+
   return (
     <div className="flex gap-2 overflow-x-auto">
       {places.map((place) => {
@@ -30,14 +33,6 @@ export function SavedPlacesShortcuts({ places, onSelect, onAddNew }: SavedPlaces
           </button>
         );
       })}
-      <button
-        type="button"
-        onClick={onAddNew}
-        className="flex shrink-0 items-center gap-2 rounded-xl bg-surface px-4 py-2 text-sm font-medium text-primary shadow"
-      >
-        <Plus size={16} aria-hidden="true" />
-        Novo
-      </button>
     </div>
   );
 }

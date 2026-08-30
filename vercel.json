@@ -8,7 +8,7 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; img-src 'self' data: blob: https://*.mapbox.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.mapbox.com https://events.mapbox.com; worker-src 'self' blob:; child-src blob:; font-src 'self' data:;"
+          "value": "default-src 'self'; img-src 'self' data: blob: https://*.mapbox.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.mapbox.com https://events.mapbox.com https://api.geoapify.com; worker-src 'self' blob:; child-src blob:; font-src 'self' data:;"
         }
       ]
     }

@@ -1,85 +1,330 @@
 # RouteWise
 
-App web de navegação GPS interativa, no estilo Waze/Google Maps: busque um destino, veja a rota traçada no mapa e seja guiado ao vivo, passo a passo, até chegar lá.
+**App web de navegação GPS interativa, no estilo Waze / Google Maps.** Detecta sua
+localização, busca um destino, traça a rota no mapa e guia você ao vivo —
+passo a passo, com instruções por voz — até chegar lá.
 
 🔗 **Demo ao vivo:** _(adicionar o link da Vercel aqui após o deploy)_
 
+![RouteWise](public/og-card.png)
+
+---
+
+## Índice
+
+- [Objetivo do projeto](#objetivo-do-projeto)
+- [Funcionalidades](#funcionalidades)
+- [Identidade visual e compartilhamento](#identidade-visual-e-compartilhamento)
+- [Stack e ferramentas](#stack-e-ferramentas)
+- [Arquitetura](#arquitetura)
+- [Como o projeto foi construído (processo e governança)](#como-o-projeto-foi-construído-processo-e-governança)
+- [Segurança](#segurança)
+- [Qualidade e CI](#qualidade-e-ci)
+- [Configuração local](#configuração-local)
+- [Como usar o app](#como-usar-o-app)
+- [Scripts disponíveis](#scripts-disponíveis)
+- [Deploy](#deploy)
+- [Habilidades exercitadas](#habilidades-exercitadas)
+- [Roadmap](#roadmap)
+- [Licença](#licença)
+
+---
+
+## Objetivo do projeto
+
+Este app foi criado com dois objetivos:
+
+1. **Ampliar meus conhecimentos** em desenvolvimento web moderno — React + TypeScript
+   em modo estrito, integração com APIs de mapas e geocodificação, testes
+   automatizados, PWA, segurança de front-end e um fluxo de trabalho disciplinado
+   (especificação → plano → implementação → revisão).
+2. **Construir um GPS de verdade**, com funcionalidades parecidas com as dos
+   aplicativos mais conhecidos (Waze, Google Maps): busca de endereços e
+   estabelecimentos, cálculo de rota com tempo estimado, navegação em tela cheia
+   com câmera em modo condução, instruções por voz e recálculo automático quando
+   o usuário sai do trajeto.
+
+Não é um clone visual de nenhum app específico — é uma reconstrução do **fluxo de
+navegação** a partir do zero, para entender como cada peça funciona por dentro.
+
+---
+
 ## Funcionalidades
 
-- Detecção automática da localização atual como ponto de partida
-- Busca de destino com sugestões (autocomplete) e locais salvos (Casa/Trabalho/outros)
-- Cálculo de rota com distância e tempo estimado, com seletor de modo de transporte (carro/a pé/bicicleta)
-- Tela de navegação em tela cheia: câmera em modo condução (segue e gira com a direção do usuário), banner de manobra com seta e distância, velocidade atual
-- Instruções por voz (Web Speech API) e recálculo automático de rota ao desviar do trajeto
-- Modo escuro, com estilos de mapa dedicados para navegação diurna/noturna
-- Interface responsiva construída com Tailwind CSS
+**Planejamento da rota**
 
-## Stack Técnica
+- Detecção automática da localização atual como ponto de partida (com _fallback_
+  para baixa precisão e mensagens de erro específicas por causa: permissão
+  negada, posição indisponível, tempo esgotado).
+- Busca de destino com **autocomplete** (sugestões enquanto digita), viés de
+  proximidade pela localização atual e resultados em português do Brasil.
+- Busca inteligente por **estabelecimento**: quando o termo é uma categoria
+  ("farmácia", "banco", "padaria"…), o app consulta em paralelo por categoria
+  **e** por texto, para achar tanto a marca específica digitada quanto qualquer
+  estabelecimento próximo daquele tipo.
+- **Locais salvos** (Casa, Trabalho, etc.), persistidos no navegador, como
+  atalhos de destino.
+- **Pontos de interesse no mapa**: com zoom aproximado, o mapa exibe marcadores
+  dos estabelecimentos próximos; tocar em um deles vira destino.
+- Cálculo de rota com **distância e tempo estimado (ETA)** e seletor de modo de
+  transporte — carro, a pé ou bicicleta.
 
-- [Vite](https://vitejs.dev/) + [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) (modo `strict`)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/guides/) para mapa, geocoding e cálculo de rotas
-- [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) para testes
-- Deploy na [Vercel](https://vercel.com/)
+**Navegação ao vivo**
+
+- Tela cheia com **câmera em modo condução**: o mapa segue e gira conforme a
+  direção (heading) do usuário.
+- **Banner de manobra** com seta (ícone por tipo de curva/retorno) e distância
+  até a próxima ação.
+- **Barra de status** com ETA, distância restante e velocidade atual.
+- **Instruções por voz** (Web Speech API), com controle para ligar/desligar.
+- **Recálculo automático da rota** ao desviar do trajeto.
+- **Tela de chegada** ao alcançar o destino.
+- Estilos de mapa dedicados para navegação **diurna e noturna**, seguindo o tema.
+
+**Interface**
+
+- **Modo claro / escuro** persistido, sincronizado com a preferência do sistema.
+- Layout responsivo (Tailwind CSS), pensado primeiro para celular.
+- **Instalável como PWA** e abre em tela cheia quando adicionado à tela inicial.
+
+---
+
+## Identidade visual e compartilhamento
+
+O app tem uma marca própria — uma seta de navegação _duotone_ dentro de um selo
+azul — usada como favicon, ícone de PWA e no cartão de compartilhamento.
+
+**Ao compartilhar o link** (WhatsApp, Telegram, redes sociais), em vez de uma URL
+"pelada" aparece um **cartão 1200×630** com o mapa, a rota, o logo e a frase
+_"Planeje a rota. Chegue mais rápido."_ — e o cartão inteiro é clicável. Isso é
+feito com _meta tags_ **Open Graph** e **Twitter Card** no [`index.html`](index.html).
+
+**Ao abrir no celular**, o usuário pode escolher _"Adicionar à tela inicial"_ e
+passa a ter um **ícone de app** de verdade, que abre em tela cheia, sem a barra
+do navegador (Web App Manifest + Service Worker via `vite-plugin-pwa`).
+
+Os assets são **gerados de forma reprodutível** a partir de dois SVGs-fonte:
+
+| Fonte                                                  | Gera                                                                                    | Como                                                                          |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [`assets/brand/logo.svg`](assets/brand/logo.svg)       | `favicon.ico`, `favicon`/`logo.svg`, `apple-touch-icon`, `pwa-192/512`, `maskable-icon` | `npm run generate:pwa-assets` (`@vite-pwa/assets-generator`)                  |
+| [`assets/brand/og-card.svg`](assets/brand/og-card.svg) | `public/og-card.png`                                                                    | `npm run generate:og` (`@resvg/resvg-js`, sem depender de fontes do servidor) |
+
+O Service Worker faz _precache_ **apenas do "esqueleto" do app** (JS, CSS, HTML,
+ícones, fontes). Tiles do Mapbox e respostas da Geoapify **nunca** são cacheados —
+precisam vir sempre da rede.
+
+---
+
+## Stack e ferramentas
+
+**Aplicação**
+
+- [Vite](https://vitejs.dev/) 5 — bundler e dev server
+- [React](https://react.dev/) 18 + [TypeScript](https://www.typescriptlang.org/) em modo `strict` (com `noUnusedLocals` / `noUnusedParameters` / `noFallthroughCasesInSwitch`)
+- [Tailwind CSS](https://tailwindcss.com/) 3 — estilização, com _design tokens_ próprios e estratégia de modo escuro por classe
+- [lucide-react](https://lucide.dev/) — ícones
+- [@fontsource-variable/inter](https://fontsource.org/fonts/inter) — fonte Inter auto-hospedada (sem chamada a CDN de terceiros)
+- [vite-plugin-pwa](https://vite-pwa-org.netlify.app/) + [@vite-pwa/assets-generator](https://vite-pwa-org.netlify.app/assets-generator/) — manifest, service worker e ícones
+- [@resvg/resvg-js](https://github.com/yisibl/resvg-js) — renderização do cartão Open Graph em PNG
+
+**APIs externas**
+
+- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) — renderização do mapa
+- [Mapbox Directions API](https://docs.mapbox.com/api/navigation/directions/) — cálculo de rota, ETA e manobras passo a passo
+- [Geoapify Geocoding Autocomplete](https://apidocs.geoapify.com/docs/geocoding/) — busca de endereço com autocomplete
+- [Geoapify Places API](https://apidocs.geoapify.com/docs/places/) — busca por categoria de estabelecimento e pontos de interesse próximos
+- _(O Geocoding do Mapbox foi testado e descartado: limitado demais para achar endereços específicos e nomes de negócios no Brasil.)_
+
+**APIs do navegador**
+
+- Geolocation API (`watchPosition`) — posição, velocidade e heading
+- Web Speech API (`SpeechSynthesis`) — instruções por voz
+- `localStorage` — locais salvos e preferência de tema
+- Service Worker + Web App Manifest — PWA instalável
+- `matchMedia` — preferência de tema do sistema
+
+**Qualidade e infra**
+
+- [Vitest](https://vitest.dev/) + [React Testing Library](https://testing-library.com/) + jsdom — testes
+- [ESLint](https://eslint.org/) 9 (flat config) + [typescript-eslint](https://typescript-eslint.io/) + `eslint-plugin-react-hooks`
+- [Prettier](https://prettier.io/) — formatação, exigida no CI
+- [GitHub Actions](https://github.com/features/actions) — pipeline de CI
+- [Vercel](https://vercel.com/) — hospedagem
+
+---
 
 ## Arquitetura
 
-O projeto é uma SPA 100% client-side, sem backend. O estado da navegação é controlado por uma máquina de estados (`idle → routePlanned → navigating`) implementada com `useReducer`. O código é organizado por feature:
+SPA **100% client-side, sem backend**. O estado da navegação é uma **máquina de
+estados** (`idle → routePlanned → navigating → arrived`) implementada com
+`useReducer`. O código é organizado **por feature**, com hooks isolados e
+clientes HTTP tipados.
 
 ```
+assets/brand/        # SVGs-fonte da identidade visual (logo, cartão OG)
+scripts/
+  generate-og.mjs    # SVG do cartão OG -> public/og-card.png
+public/              # Ícones de PWA, favicon e cartão OG (gerados, versionados)
+pwa-assets.config.js # Config do gerador de ícones
+
 src/
-  components/    # Componentes de UI
-    ArrivalScreen.tsx
-    DestinationCard.tsx
-    ErrorBanner.tsx
-    ManeuverBanner.tsx
-    MapView.tsx
-    NavigationStatusBar.tsx
-    NavigationView.tsx
-    PlanningView.tsx
-    SavedPlacesShortcuts.tsx
-    SearchBar.tsx
-    TravelModeToggle.tsx
-  features/      # Lógica de domínio, organizada por feature
-    geolocation/
-      useGeolocation.ts
-    map/
-      useMapboxMap.ts
-    places/      # Locais salvos (Casa, Trabalho, etc.)
-      useSavedPlaces.ts
-    routing/     # Cálculo de rotas e estado de navegação
-      navigationReducer.ts
-      useRoute.ts
-    search/      # Geocoding e busca de destinos
-      useGeocodingSearch.ts
-    theme/       # Modo escuro e gerenciamento de tema
-      useTheme.ts
-    voice/       # Instruções por voz
-      useVoiceGuidance.ts
-  services/      # Clientes HTTP tipados
-    mapboxClient.ts
-  types/         # Tipos TypeScript compartilhados
-    index.ts
-  utils/         # Funções puras
-    distance.ts
-    format.ts
-    maneuverIcon.ts  # Ícones de manobras para instruções passo a passo
-  App.tsx        # Componente raiz que renderiza PlanningView ou NavigationView
-  main.tsx       # Ponto de entrada do React
-  index.css      # Estilos globais
-  vite-env.d.ts  # Definições de tipos do Vite
+  components/        # Componentes de UI
+    ArrivalScreen.tsx        DestinationCard.tsx      ErrorBanner.tsx
+    ExitedScreen.tsx         ManeuverBanner.tsx       MapView.tsx
+    NavigationStatusBar.tsx  NavigationView.tsx       PlanningView.tsx
+    SavedPlacesShortcuts.tsx SearchBar.tsx            TravelModeToggle.tsx
+  features/          # Lógica de domínio, por feature
+    geolocation/   useGeolocation.ts            # posição, velocidade, heading
+    layout/        useElementHeight.ts          # medição de altura para o mapa
+    map/           useMapboxMap.ts              # ciclo de vida do mapa Mapbox
+    places/        useSavedPlaces.ts            # locais salvos (localStorage)
+                   useNearbyPlacesMarkers.ts    # POIs no mapa (com debounce e backoff)
+    routing/       navigationReducer.ts         # máquina de estados
+                   useRoute.ts                  # cálculo e recálculo de rota
+    search/        useGeocodingSearch.ts        # autocomplete + busca por categoria
+    theme/         useTheme.ts                  # modo claro/escuro persistido
+    voice/         useVoiceGuidance.ts          # instruções por voz
+  services/         # Clientes HTTP tipados
+    mapboxClient.ts     # mapa + Directions API
+    geoapifyClient.ts   # endereços, categorias e lugares próximos
+  data/
+    placeCategories.ts # dicionário de categorias de estabelecimento -> Geoapify
+  types/index.ts    # tipos compartilhados
+  utils/            # funções puras (distância haversine, formatação, ícones de
+                    # manobra, avatar de veículo, normalização de texto)
+  App.tsx           # raiz: escolhe PlanningView ou NavigationView pelo estado
+  main.tsx          # ponto de entrada + registro do service worker
 ```
 
-## Configuração Local
+**Princípios seguidos**
+
+- Cada hook tem **uma responsabilidade** e uma interface clara; dá para entender
+  o que faz sem ler o interior.
+- Componentes de UI são "burros": recebem dados e callbacks, não falam com APIs.
+- Toda chamada de rede passa por um **cliente tipado** em `services/`, com erros
+  próprios (`MapboxRequestError`, `GeoapifyRequestError`).
+- Funções puras isoladas em `utils/`, cobertas por testes unitários.
+- Corridas e vazamentos tratados explicitamente: _debounce_ na busca, guarda
+  contra respostas obsoletas, limpeza de _watchers_ de geolocalização, _backoff_
+  de 5 min após um `429` da Geoapify.
+
+---
+
+## Como o projeto foi construído (processo e governança)
+
+O desenvolvimento seguiu um fluxo deliberado, registrado no histórico do Git e
+na pasta [`docs/superpowers/`](docs/superpowers/):
+
+1. **Especificação de design primeiro.** Antes de escrever código, cada bloco de
+   trabalho ganhou um documento de design em
+   [`docs/superpowers/specs/`](docs/superpowers/specs/) — objetivo, decisões,
+   trade-offs, tratamento de erros. Commitado antes da implementação.
+2. **Plano de implementação.** Cada spec virou um plano em
+   [`docs/superpowers/plans/`](docs/superpowers/plans/), quebrado em tarefas
+   numeradas e verificáveis.
+3. **Implementação com testes.** Cada feature entrou junto com seus testes
+   (Vitest + Testing Library). Hoje são **180 casos de teste em 31 arquivos**.
+4. **Revisão de código com correção das pendências.** Vários commits registram
+   achados de revisão sendo resolvidos antes do merge (ex.: _"resolve
+   final-review findings on reroute loop"_, _"fix App.tsx origin-race defect
+   found in Task 13 review"_).
+5. **Integração por branch.** Trabalho feito em _feature branches_ (e _git
+   worktrees_ para isolamento), integrado por merge após o CI passar.
+
+**Convenções**
+
+- **Conventional Commits**: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`,
+  `chore:`, `ci:`.
+- **Português** nas mensagens de commit e nos textos de UI; termos técnicos em
+  inglês quando é o padrão do ecossistema.
+- Nada de segredo no repositório — apenas `.env.example` com _placeholders_.
+
+---
+
+## Segurança
+
+**Chaves de API.** Por ser uma SPA sem backend, o token do Mapbox e a chave da
+Geoapify **são entregues ao navegador** — é uma limitação inerente desse tipo de
+app. Por isso:
+
+- Nunca são commitadas: vêm de variáveis de ambiente (`.env`, que está no
+  `.gitignore`); o repositório só tem `.env.example` com valores fictícios.
+- A proteção real é **restrição no provedor**:
+  - **Mapbox** → painel de _access tokens_ → _URL restrictions_: adicionar o
+    domínio de produção (ex.: `https://routewise.vercel.app`) e
+    `http://localhost:5173`.
+  - **Geoapify** → painel do projeto → restrição por _domínio / referrer_ da
+    mesma forma.
+- Ambas usam **plano gratuito com cota diária** e **sem cartão cadastrado** — se
+  a cota estourar, a API passa a responder com erro até renovar, sem gerar
+  cobrança.
+
+**Headers HTTP** (aplicados pela Vercel via [`vercel.json`](vercel.json)):
+
+| Header                    | Valor                             |
+| ------------------------- | --------------------------------- |
+| `Content-Security-Policy` | _allowlist_ estrita (abaixo)      |
+| `X-Content-Type-Options`  | `nosniff`                         |
+| `X-Frame-Options`         | `DENY` (bloqueia _clickjacking_)  |
+| `Referrer-Policy`         | `strict-origin-when-cross-origin` |
+
+**Content-Security-Policy** — tudo é `'self'` por padrão; as únicas exceções:
+
+- `connect-src`: `api.mapbox.com`, `events.mapbox.com`, `api.geoapify.com`
+- `img-src`: `'self'`, `data:`, `blob:`, `https://*.mapbox.com` (tiles)
+- `script-src`: `'self'` apenas — **sem `unsafe-inline`**
+- `worker-src` / `child-src`: `'self'` e `blob:` (worker do Mapbox + service worker)
+
+**Dependências.** O CI roda `npm audit --audit-level=high --omit=dev` a cada push
+e PR. O `--omit=dev` foca no que **realmente vai para o navegador**; advisories
+que só afetam o _toolchain_ de desenvolvimento (Vite/Vitest) são acompanhados à
+parte, sem travar o build.
+
+**Privacidade.** Sem contas de usuário, sem servidor, sem coleta de dados. Locais
+salvos e preferência de tema ficam **só no `localStorage`** do próprio
+navegador. A localização é usada em tempo real e não é armazenada nem enviada a
+lugar nenhum além das APIs de rota/geocodificação.
+
+---
+
+## Qualidade e CI
+
+O [pipeline do GitHub Actions](.github/workflows/ci.yml) roda em **todo push e
+pull request**, e cada etapa é um portão:
+
+```
+npm ci
+npm run lint          # ESLint (flat config) + regras de React Hooks
+npm run format:check  # Prettier — falha se algo estiver fora do padrão
+npx tsc -b            # checagem de tipos (build composto, TS strict)
+npm run test          # Vitest — 180 casos
+npm run build         # build de produção precisa compilar
+npm audit --audit-level=high --omit=dev   # vulnerabilidades no bundle final
+```
+
+Configurações que reforçam a qualidade:
+
+- **TypeScript `strict`** + `noUnusedLocals`, `noUnusedParameters`,
+  `noFallthroughCasesInSwitch`.
+- **ESLint 9** flat config com `eslint-plugin-react-hooks` (regras de
+  dependências de hooks) e `react-refresh`.
+- **Prettier** com config explícita (`singleQuote`, `trailingComma: all`,
+  `printWidth: 100`), obrigatório no CI.
+
+---
+
+## Configuração local
 
 ### Pré-requisitos
 
-- Node.js 20+
-- Uma conta gratuita no [Mapbox](https://account.mapbox.com/) e um token de acesso público
+- **Node.js 20+**
+- Conta gratuita no [Mapbox](https://account.mapbox.com/) + token público
+- Conta gratuita na [Geoapify](https://myprojects.geoapify.com/) + chave de API
 
 ### Passo a passo
 
-1. Clone o repositório e instale as dependências:
+1. Clone e instale:
 
    ```bash
    git clone https://github.com/Edilson-5762/RouteWise.git
@@ -87,52 +332,115 @@ src/
    npm install
    ```
 
-2. Copie o arquivo de exemplo de variáveis de ambiente e insira seu token do Mapbox:
+2. Crie o `.env` a partir do exemplo:
 
    ```bash
    cp .env.example .env
    ```
 
-   Edite `.env` e substitua o valor de `VITE_MAPBOX_TOKEN` pelo seu token público (encontrado em https://account.mapbox.com/access-tokens/).
+   Preencha:
 
-3. Rode o projeto localmente:
+   | Variável                | Obrigatória | Para quê                                                                                               |
+   | ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
+   | `VITE_MAPBOX_TOKEN`     | Sim         | Renderizar o mapa e calcular rota / ETA (token público em <https://account.mapbox.com/access-tokens/>) |
+   | `VITE_GEOAPIFY_API_KEY` | Sim         | Busca de endereço/estabelecimento e lugares próximos (chave em <https://myprojects.geoapify.com/>)     |
+
+   > ⚠️ Não compartilhe o conteúdo do `.env` em prints, mensagens ou commits.
+   > Se um token vazar, revogue-o no painel do provedor e gere outro.
+
+3. Rode:
 
    ```bash
    npm run dev
    ```
 
-4. Acesse `http://localhost:5173` e permita o acesso à localização quando solicitado.
+4. Abra <http://localhost:5173> e **permita o acesso à localização** quando o
+   navegador pedir.
 
-### Variáveis de Ambiente
+---
 
-| Variável            | Obrigatória | Descrição                               |
-| ------------------- | ----------- | --------------------------------------- |
-| `VITE_MAPBOX_TOKEN` | Sim         | Token público de acesso à API do Mapbox |
+## Como usar o app
 
-## Scripts Disponíveis
+1. **Abra o app** — ele detecta sua posição e centraliza o mapa em você.
+2. **Digite um destino** no campo de busca. Escolha uma sugestão da lista, um
+   local salvo (Casa/Trabalho) ou toque num ponto de interesse no mapa.
+3. **Confira a rota** — distância e tempo estimado aparecem no cartão; troque o
+   modo de transporte (carro / a pé / bicicleta) se quiser.
+4. **Salve o destino** (opcional) com um nome, para virar atalho depois.
+5. **Inicie a navegação** — a tela vira modo condução: o mapa segue você, o
+   banner mostra a próxima manobra e a voz vai avisando. Se você sair da rota,
+   ela é recalculada sozinha.
+6. **Chegou** — a tela de chegada confirma o fim do trajeto.
 
-| Comando          | Descrição                            |
-| ---------------- | ------------------------------------ |
-| `npm run dev`    | Inicia o servidor de desenvolvimento |
-| `npm run build`  | Gera a build de produção             |
-| `npm run test`   | Roda a suíte de testes               |
-| `npm run lint`   | Roda o ESLint                        |
-| `npm run format` | Formata o código com Prettier        |
+Toque no botão de tema para alternar claro/escuro. Para instalar no celular, use
+_"Adicionar à tela inicial"_ no menu do navegador.
 
-## Segurança
+---
 
-- O token do Mapbox nunca é commitado — é lido de uma variável de ambiente e deve ser restrito por domínio no painel do Mapbox:
-  1. Acesse o painel de tokens em https://account.mapbox.com/access-tokens/.
-  2. Edite o token público usado por esta aplicação (`VITE_MAPBOX_TOKEN`).
-  3. Em "URL restrictions", adicione o domínio de produção (ex.: `https://routewise.vercel.app`) e `http://localhost:5173` para desenvolvimento local.
-- Headers de segurança (CSP, `X-Content-Type-Options`, `X-Frame-Options`) são aplicados via `vercel.json`.
-- O pipeline de CI roda `npm audit` a cada push para checar vulnerabilidades nas dependências. Advisories do toolchain de desenvolvimento (ex.: vite/vitest) são tratados separadamente do que é enviado ao navegador — o CI usa `npm audit --omit=dev`, que reflete apenas as dependências que entram no bundle final.
+## Scripts disponíveis
 
-## Próximos Passos
+| Comando                       | Descrição                                                          |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `npm run dev`                 | Servidor de desenvolvimento (<http://localhost:5173>)              |
+| `npm run build`               | Build de produção (`tsc -b` + `vite build`)                        |
+| `npm run preview`             | Serve a build de produção localmente                               |
+| `npm run test`                | Roda a suíte de testes (Vitest)                                    |
+| `npm run test:watch`          | Testes em modo _watch_                                             |
+| `npm run lint`                | ESLint                                                             |
+| `npm run format`              | Formata o código com Prettier                                      |
+| `npm run format:check`        | Verifica a formatação (usado no CI)                                |
+| `npm run generate:pwa-assets` | Regera favicon e ícones de PWA a partir de `public/logo.svg`       |
+| `npm run generate:og`         | Regera `public/og-card.png` a partir de `assets/brand/og-card.svg` |
 
-- Suporte offline (cache de mapas e motor de rotas local)
-- Integração com sistemas de navegação nativa do dispositivo (Apple Maps, Google Maps)
+---
+
+## Deploy
+
+Hospedado na **Vercel**. O build de produção é `npm run build`; a Vercel serve a
+pasta `dist/` como estático e aplica os headers do [`vercel.json`](vercel.json).
+
+**Checklist pós-deploy:**
+
+1. No painel do **Mapbox** e da **Geoapify**, adicionar o domínio final da
+   Vercel às restrições de URL/referrer.
+2. Em [`index.html`](index.html), conferir se `og:url` e `og:image` apontam para
+   o domínio real (o padrão é `https://routewise.vercel.app`). Se for outro,
+   trocar as duas linhas.
+3. Colar o link numa conversa do WhatsApp para conferir o cartão de
+   compartilhamento.
+
+---
+
+## Habilidades exercitadas
+
+- **React + TypeScript estrito**: hooks customizados, `useReducer` como máquina
+  de estados, tipagem de ponta a ponta, tratamento de corridas e cleanup.
+- **Integração de mapas e geodados**: Mapbox GL, Directions API, geocodificação
+  com autocomplete, busca por categoria, POIs dinâmicos com _debounce_ e
+  _backoff_ de _rate limit_.
+- **APIs do navegador**: Geolocation, Web Speech, `localStorage`, `matchMedia`.
+- **PWA**: Web App Manifest, Service Worker (Workbox via `vite-plugin-pwa`),
+  estratégia de cache consciente (só o _shell_).
+- **Identidade visual e metadados sociais**: SVG, geração reprodutível de
+  assets, Open Graph / Twitter Cards.
+- **Segurança de front-end**: CSP como _allowlist_, headers de segurança,
+  gestão de segredos, restrição de chaves no provedor, `npm audit` no CI.
+- **Engenharia de software**: design-doc primeiro, planos por tarefa, TDD,
+  revisão de código, Conventional Commits, CI com portões de lint/format/tipos/
+  testes/build/audit, organização por feature.
+- **Deploy**: Vercel, variáveis de ambiente, headers via configuração.
+
+---
+
+## Roadmap
+
+- Suporte offline mais amplo (cache de mapas e motor de rotas local)
+- Integração com navegação nativa do dispositivo (Apple Maps, Google Maps)
+- Histórico de destinos recentes
+- Compartilhar rota / ETA com outra pessoa
+
+---
 
 ## Licença
 
-Este projeto está sob a licença MIT — veja o arquivo [LICENSE](LICENSE) para detalhes.
+MIT — veja [LICENSE](LICENSE).

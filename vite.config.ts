@@ -1,9 +1,47 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      // Ícones em public/, gerados de public/logo.svg por `npm run generate:pwa-assets`.
+      includeAssets: ['favicon.ico', 'logo.svg', 'apple-touch-icon-180x180.png', 'og-card.png'],
+      manifest: {
+        name: 'RouteWise',
+        short_name: 'RouteWise',
+        description:
+          'GPS de rotas no navegador: busque um destino, veja o trajeto e o tempo estimado, e siga a navegação.',
+        lang: 'pt-BR',
+        theme_color: '#2563EB',
+        background_color: '#0f172a',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        icons: [
+          { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          {
+            src: 'maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+      workbox: {
+        // Só o "esqueleto" do app entra no cache offline — nada de tiles do
+        // Mapbox nem respostas da Geoapify, que precisam vir sempre da rede.
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   test: {
     environment: 'jsdom',
     globals: true,

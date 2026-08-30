@@ -3,7 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563EB" />
     <title>RouteWise</title>
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+    <!-- <link rel="manifest"> é injetada automaticamente pelo vite-plugin-pwa -->
+
+    <meta
+      name="description"
+      content="GPS de rotas no navegador: busque um destino, veja o trajeto e o tempo estimado, e siga a navegação. Sem instalar nada."
+    />
+
+    <!-- iOS: abre em tela cheia quando adicionado à tela inicial -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RouteWise" />
+
+    <!-- Cartão de compartilhamento (WhatsApp, Telegram, redes sociais).
+         og:url e og:image usam o domínio da Vercel — se o domínio final for
+         outro, troque as duas linhas abaixo. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="RouteWise" />
+    <meta property="og:title" content="RouteWise — Planeje a rota. Chegue mais rápido." />
+    <meta
+      property="og:description"
+      content="GPS de rotas no navegador: busque um destino, veja o trajeto e o tempo estimado, e siga a navegação. Sem instalar nada."
+    />
+    <meta property="og:url" content="https://routewise.vercel.app/" />
+    <meta property="og:image" content="https://routewise.vercel.app/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="RouteWise — app de rotas com um trajeto traçado no mapa"
+    />
+    <meta property="og:locale" content="pt_BR" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="RouteWise — Planeje a rota. Chegue mais rápido." />
+    <meta
+      name="twitter:description"
+      content="GPS de rotas no navegador: busque um destino, veja o trajeto e o tempo estimado, e siga a navegação."
+    />
+    <meta name="twitter:image" content="https://routewise.vercel.app/og-card.png" />
   </head>
   <body>
     <div id="root"></div>
