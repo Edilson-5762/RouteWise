@@ -74,6 +74,7 @@ describe('App', () => {
           return 1;
         }),
         clearWatch: vi.fn(),
+        getCurrentPosition: vi.fn(),
       },
       configurable: true,
     });
