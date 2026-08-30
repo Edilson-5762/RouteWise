@@ -4,7 +4,7 @@
 localização, busca um destino, traça a rota no mapa e guia você ao vivo —
 passo a passo, com instruções por voz — até chegar lá.
 
-🔗 **Demo ao vivo:** _(adicionar o link da Vercel aqui após o deploy)_
+🔗 **Demo ao vivo:** <https://route-wise-eight.vercel.app>
 
 ![RouteWise](public/og-card.png)
 
@@ -252,7 +252,7 @@ app. Por isso:
   `.gitignore`); o repositório só tem `.env.example` com valores fictícios.
 - A proteção real é **restrição no provedor**:
   - **Mapbox** → painel de _access tokens_ → _URL restrictions_: adicionar o
-    domínio de produção (ex.: `https://route-wise.vercel.app`) e
+    domínio de produção (ex.: `https://route-wise-eight.vercel.app`) e
     `http://localhost:5173`.
   - **Geoapify** → painel do projeto → restrição por _domínio / referrer_ da
     mesma forma.
@@ -396,16 +396,16 @@ _"Adicionar à tela inicial"_ no menu do navegador.
 
 ## Deploy
 
-Hospedado na **Vercel**. O build de produção é `npm run build`; a Vercel serve a
-pasta `dist/` como estático e aplica os headers do [`vercel.json`](vercel.json).
+Hospedado na **Vercel** em <https://route-wise-eight.vercel.app>. O build de
+produção é `npm run build`; a Vercel serve a pasta `dist/` como estático e aplica
+os headers do [`vercel.json`](vercel.json).
 
 **Checklist pós-deploy:**
 
-1. No painel do **Mapbox** e da **Geoapify**, adicionar o domínio final da
-   Vercel às restrições de URL/referrer.
-2. Em [`index.html`](index.html), conferir se `og:url` e `og:image` apontam para
-   o domínio real (o padrão é `https://route-wise.vercel.app`). Se for outro,
-   trocar as duas linhas.
+1. No painel do **Mapbox** e da **Geoapify**, adicionar
+   `https://route-wise-eight.vercel.app` às restrições de URL/referrer.
+2. Se o domínio de produção mudar, atualizar `og:url`, `og:image` e
+   `twitter:image` em [`index.html`](index.html).
 3. Colar o link numa conversa do WhatsApp para conferir o cartão de
    compartilhamento.
 
