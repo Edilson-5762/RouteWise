@@ -4,7 +4,7 @@ import { useGeolocation } from './useGeolocation';
 
 describe('useGeolocation', () => {
   beforeEach(() => {
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn(),
         clearWatch: vi.fn(),

@@ -64,7 +64,7 @@ describe('App', () => {
   beforeEach(() => {
     mapConstructorSpy.mockClear();
     mapRemoveSpy.mockClear();
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           success({
@@ -121,7 +121,7 @@ describe('App', () => {
 
   it('planeja a rota mesmo quando o destino é selecionado antes do primeiro fix de GPS', async () => {
     let sendPosition: PositionCallback | null = null;
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           sendPosition = success;
@@ -185,7 +185,7 @@ describe('App', () => {
 
   it('chama getDirections apenas uma vez mesmo com múltiplas atualizações de GPS antes da rota resolver', async () => {
     let sendPosition: PositionCallback | null = null;
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           sendPosition = success;
@@ -314,7 +314,7 @@ describe('App', () => {
         return 1;
       },
     );
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: watchPositionMock,
         clearWatch: vi.fn(),
@@ -436,7 +436,7 @@ describe('App', () => {
 
   it('recalcula a rota a partir da posição atual do GPS ao iniciar a navegação', async () => {
     let sendPosition: PositionCallback | null = null;
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           sendPosition = success;
@@ -512,7 +512,7 @@ describe('App', () => {
 
   it('tenta recalcular a rota apenas uma vez por episódio de desvio quando o recálculo falha', async () => {
     let sendPosition: PositionCallback | null = null;
-    Object.defineProperty(global.navigator, 'geolocation', {
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
           sendPosition = success;
