@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import mapboxgl from 'mapbox-gl';
 import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../../types';
-import type { Feature, LineString } from 'geojson';
 import { getPuckIconMarkup } from '../../utils/vehicleAvatar';
 import { formatSpeedKmh } from '../../utils/format';
+import { haversineDistanceMeters } from '../../utils/distance';
+import {
+  buildRouteGeojson,
+  buildNavigationRouteGeojson,
+  bearingBetween,
+} from './navigationGeometry';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -14,33 +19,25 @@ const ROUTE_LAYER_ID = 'route-layer';
 const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
 const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
-// A Directions API do Mapbox gruda ("snap") a origem informada no ponto
-// roteável mais próximo — confirmado com uma chamada real: uma origem a
-// ~92m de distância da via mais próxima teve seu primeiro ponto de rota
-// devolvido ali, não na coordenada de GPS enviada. Sem esse trecho de
-// conexão, a linha azul nasce "na pista" enquanto o puck (posição real do
-// usuário) fica visivelmente flutuando ao lado dela sempre que o usuário
-// não está exatamente sobre uma via — o comportamento reproduzido no print
-// enviado pelo usuário. Prepend a origem real como primeiro ponto resolve
-// isso visualmente, à la Waze, sem alterar a rota/ETA calculados (que
-// continuam vindo do ponto já snapado).
-function buildRouteGeojson(route: Route, connectorOrigin: Coordinates | null): Feature<LineString> {
-  const coordinates: [number, number][] = route.geometry.map((point) => [point.lng, point.lat]);
-  const [firstLng, firstLat] = coordinates[0] ?? [];
-  const isAlreadyAtOrigin =
-    connectorOrigin !== null &&
-    firstLng === connectorOrigin.lng &&
-    firstLat === connectorOrigin.lat;
+// Zoom/pitch da câmera de condução — visão "no capô", bem de perto.
+const NAV_ZOOM = 18;
+const NAV_PITCH = 60;
+// Desloca a câmera para o puck ficar no terço de baixo da tela (sobra mais
+// trajeto visível à frente), em fração da altura do container.
+const NAV_PUCK_VERTICAL_OFFSET_RATIO = 0.2;
+// Deslocamento mínimo entre dois fixes para deles derivar uma direção de
+// deslocamento confiável (abaixo disso é ruído de GPS parado).
+const TRAVEL_BEARING_MIN_METERS = 4;
+// Depois de um gesto do usuário durante a navegação, quanto tempo até a câmera
+// voltar a seguir sozinha (igual Waze).
+const RESUME_FOLLOW_DELAY_MS = 4000;
 
-  if (connectorOrigin && !isAlreadyAtOrigin) {
-    coordinates.unshift([connectorOrigin.lng, connectorOrigin.lat]);
-  }
-
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates },
-  };
+// Escolhe a linha da rota conforme o modo: navegação mostra só o que está à
+// frente (começando no puck); planejamento mostra o trajeto inteiro.
+function routeGeojsonFor(route: Route, position: Coordinates | null, isNavigating: boolean) {
+  return isNavigating
+    ? buildNavigationRouteGeojson(route, position)
+    : buildRouteGeojson(route, position);
 }
 
 interface UseMapboxMapOptions {
@@ -179,6 +176,11 @@ export function useMapboxMap({
     bounds: mapboxgl.LngLatBounds;
     padding: { top: number; bottom: number; left: number; right: number };
   } | null>(null);
+  // Posição usada no último ajuste de câmera de condução e a última direção de
+  // deslocamento derivada dela — para girar a câmera na direção do movimento
+  // quando o GPS não reporta `heading`.
+  const lastCameraPositionRef = useRef<Coordinates | null>(null);
+  const lastTravelBearingRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -194,8 +196,8 @@ export function useMapboxMap({
       container: containerRef.current,
       style: theme === 'dark' ? NIGHT_STYLE : DAY_STYLE,
       center: origin ? [origin.lng, origin.lat] : [-46.6333, -23.5505],
-      zoom: isNavigating ? 17 : 12,
-      pitch: isNavigating ? 60 : 0,
+      zoom: isNavigating ? NAV_ZOOM : 12,
+      pitch: isNavigating ? NAV_PITCH : 0,
       bearing: isNavigating && headingDegrees != null ? headingDegrees : 0,
     });
     // A instância acima já nasce com o estilo correto — marca a próxima
@@ -400,7 +402,7 @@ export function useMapboxMap({
       return;
     }
 
-    const geojson = buildRouteGeojson(route, originRef.current);
+    const geojson = routeGeojsonFor(route, originRef.current, isNavigating);
 
     const applyRoute = () => {
       const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
@@ -418,7 +420,7 @@ export function useMapboxMap({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#ffffff',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 6, 18, 13],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 6, 18, 18],
             'line-opacity': 0.95,
           },
         });
@@ -429,7 +431,7 @@ export function useMapboxMap({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#2563eb',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 8],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 12],
           },
         });
       }
@@ -478,9 +480,9 @@ export function useMapboxMap({
     // cartão mesmo assim.
   }, [route, theme, isNavigating, chromeInsets]);
 
-  // Mantém o trecho de conexão puck→rota grudado na posição real do usuário
-  // conforme o GPS atualiza, sem repetir fitBounds/criação de camadas (que já
-  // rodaram no efeito acima) — só atualiza a source, se ela já existir.
+  // Redesenha a linha da rota conforme o GPS atualiza, sem repetir
+  // fitBounds/criação de camadas (que já rodaram no efeito acima) — só o
+  // setData. Na navegação isso "consome" o trecho já percorrido a cada avanço.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !route) {
@@ -488,9 +490,35 @@ export function useMapboxMap({
     }
     const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (source) {
-      source.setData(buildRouteGeojson(route, origin));
+      source.setData(routeGeojsonFor(route, origin, isNavigating));
     }
-  }, [route, origin]);
+  }, [route, origin, isNavigating]);
+
+  // Aplica a câmera de condução (visão "no capô") centrada em `position`:
+  // zoom de perto, inclinada, girada para a direção de deslocamento e com o
+  // puck jogado para o terço de baixo da tela.
+  const driveCameraTo = useCallback(
+    (map: mapboxgl.Map, position: Coordinates) => {
+      const previous = lastCameraPositionRef.current;
+      if (previous && haversineDistanceMeters(previous, position) >= TRAVEL_BEARING_MIN_METERS) {
+        lastTravelBearingRef.current = bearingBetween(previous, position);
+      }
+      lastCameraPositionRef.current = position;
+
+      const bearing = lastTravelBearingRef.current ?? headingDegrees ?? map.getBearing();
+      const offsetY = (containerRef.current?.clientHeight ?? 0) * NAV_PUCK_VERTICAL_OFFSET_RATIO;
+
+      map.easeTo({
+        center: [position.lng, position.lat],
+        zoom: NAV_ZOOM,
+        pitch: NAV_PITCH,
+        bearing,
+        offset: [0, offsetY],
+        duration: 500,
+      });
+    },
+    [headingDegrees, containerRef],
+  );
 
   useEffect(() => {
     const map = mapRef.current;
@@ -502,17 +530,24 @@ export function useMapboxMap({
       if (!isFollowingUser) {
         return;
       }
-      map.easeTo({
-        center: [origin.lng, origin.lat],
-        zoom: 17,
-        pitch: 60,
-        bearing: headingDegrees ?? map.getBearing(),
-        duration: 500,
-      });
+      driveCameraTo(map, origin);
     } else {
-      map.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+      lastCameraPositionRef.current = null;
+      lastTravelBearingRef.current = null;
+      map.easeTo({ pitch: 0, bearing: 0, offset: [0, 0], duration: 500 });
     }
-  }, [origin, isNavigating, headingDegrees, isFollowingUser]);
+  }, [origin, isNavigating, headingDegrees, isFollowingUser, driveCameraTo]);
+
+  // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um
+  // toque sem querer com o celular na mão), a câmera volta a seguir sozinha
+  // depois de alguns segundos — igual Waze/Maps.
+  useEffect(() => {
+    if (!isNavigating || isFollowingUser) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setIsFollowingUser(true), RESUME_FOLLOW_DELAY_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [isNavigating, isFollowingUser]);
 
   // Fora da navegação (planejamento), recentralizar volta a mostrar a rota
   // inteira (o mesmo enquadramento do fitBounds), não um zoom de perto no
@@ -530,13 +565,7 @@ export function useMapboxMap({
       if (!origin) {
         return;
       }
-      map.easeTo({
-        center: [origin.lng, origin.lat],
-        zoom: 17,
-        pitch: 60,
-        bearing: headingDegrees ?? map.getBearing(),
-        duration: 500,
-      });
+      driveCameraTo(map, origin);
       return;
     }
 
@@ -550,7 +579,7 @@ export function useMapboxMap({
     if (origin) {
       map.easeTo({ center: [origin.lng, origin.lat], pitch: 0, bearing: 0, duration: 500 });
     }
-  }, [origin, headingDegrees, isNavigating]);
+  }, [origin, isNavigating, driveCameraTo]);
 
   return { mapRef, mapInstance, isFollowingUser, recenter };
 }

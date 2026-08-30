@@ -216,7 +216,7 @@ describe('useMapboxMap', () => {
     rerender({ isNavigating: true, headingDegrees: 120 });
 
     expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
-      expect.objectContaining({ pitch: 60, bearing: 120, zoom: 17 }),
+      expect.objectContaining({ pitch: 60, bearing: 120, zoom: 18 }),
     );
   });
 
@@ -462,7 +462,7 @@ describe('useMapboxMap', () => {
 
     expect(result.current.isFollowingUser).toBe(true);
     expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
-      expect.objectContaining({ pitch: 60, bearing: 90, zoom: 17 }),
+      expect.objectContaining({ pitch: 60, bearing: 90, zoom: 18 }),
     );
   });
 
@@ -577,7 +577,7 @@ describe('useMapboxMap', () => {
     expect(result.current.isFollowingUser).toBe(true);
   });
 
-  it('inclui um trecho conectando a posição real do usuário ao início da rota (rota colada na via mais próxima)', () => {
+  it('na navegação, a linha começa na posição do usuário e segue só o trecho à frente (sem emenda diagonal)', () => {
     addSourceMock.mockClear();
     const containerRef = createRef<HTMLDivElement>();
     Object.defineProperty(containerRef, 'current', {
@@ -585,7 +585,7 @@ describe('useMapboxMap', () => {
       writable: true,
     });
 
-    const origin = { lat: -15.8, lng: -48.0 };
+    const origin = { lat: -23.5505, lng: -46.6333 };
 
     renderHook(() =>
       useMapboxMap({
@@ -607,8 +607,14 @@ describe('useMapboxMap', () => {
       { data: GeoJSON.Feature<GeoJSON.LineString> },
     ];
     const coordinates = config.data.geometry.coordinates;
+    // Primeiro ponto é o próprio veículo; o resto é o trajeto à frente, sem um
+    // segundo ponto "voltando" para o início parado da rota (o "facão").
     expect(coordinates[0]).toEqual([origin.lng, origin.lat]);
-    expect(coordinates[1]).toEqual([sampleRoute.geometry[0].lng, sampleRoute.geometry[0].lat]);
+    expect(coordinates.at(-1)).toEqual([
+      sampleRoute.geometry.at(-1)!.lng,
+      sampleRoute.geometry.at(-1)!.lat,
+    ]);
+    expect(coordinates).toHaveLength(2);
   });
 
   it('não duplica o ponto inicial quando a origem já coincide com o início da rota', () => {
