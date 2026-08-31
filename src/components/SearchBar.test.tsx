@@ -1,9 +1,21 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SearchBar } from './SearchBar';
 import * as geoapifyClient from '../services/geoapifyClient';
+import * as mapboxGeocodingClient from '../services/mapboxGeocodingClient';
 
 describe('SearchBar', () => {
+  beforeEach(() => {
+    // Fontes de busca extras desligadas por padrão — evita chamadas de rede
+    // reais nos testes que só exercitam a UI a partir da Geoapify.
+    vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockResolvedValue([]);
+    vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('mostra sugestões retornadas pela busca e chama onSelect com as coordenadas resolvidas', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
       {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   searchPlacesByCategory,
   searchPlaces,
+  searchPlacesFullText,
   searchNearbyPlaces,
   GeoapifyRequestError,
 } from './geoapifyClient';
@@ -224,6 +225,55 @@ describe('searchPlaces', () => {
     await expect(searchPlaces('Bradesco', { lat: -15.8, lng: -47.9 })).rejects.toThrow(
       GeoapifyRequestError,
     );
+  });
+});
+
+describe('searchPlacesFullText', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('usa o endpoint /geocode/search (não o /autocomplete) e converte as features', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            properties: {
+              formatted: 'Rua 4B Chácara 283, Vicente Pires - DF, Brasil',
+              lat: -15.8113,
+              lon: -48.0188,
+              place_id: 'place-4b-283',
+            },
+          },
+        ],
+      }),
+    });
+
+    const results = await searchPlacesFullText('Rua 4B chácara 283', { lat: -15.81, lng: -48.01 });
+
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('/v1/geocode/search?');
+    expect(url).toContain('text=Rua+4B+ch%C3%A1cara+283');
+    expect(url).toContain('filter=countrycode%3Abr');
+    expect(url).toContain('bias=proximity%3A-48.01%2C-15.81');
+    expect(results).toEqual([
+      {
+        id: 'place-4b-283',
+        placeName: 'Rua 4B Chácara 283, Vicente Pires - DF, Brasil',
+        coordinates: { lat: -15.8113, lng: -48.0188 },
+      },
+    ]);
+  });
+
+  it('lança GeoapifyRequestError quando a resposta não é ok', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 500 });
+
+    await expect(searchPlacesFullText('qualquer', null)).rejects.toThrow(GeoapifyRequestError);
   });
 });
 

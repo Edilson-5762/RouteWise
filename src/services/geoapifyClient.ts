@@ -4,6 +4,7 @@ import type { PlaceCategoryDefinition } from '../data/placeCategories';
 const GEOAPIFY_API_KEY = import.meta.env.VITE_GEOAPIFY_API_KEY;
 const PLACES_URL = 'https://api.geoapify.com/v2/places';
 const AUTOCOMPLETE_URL = 'https://api.geoapify.com/v1/geocode/autocomplete';
+const SEARCH_URL = 'https://api.geoapify.com/v1/geocode/search';
 const SEARCH_RADIUS_METERS = 8000;
 const MAX_SUGGESTIONS = 8;
 
@@ -125,6 +126,37 @@ export async function searchPlaces(
     apiKey: GEOAPIFY_API_KEY,
   });
   const response = await fetch(`${AUTOCOMPLETE_URL}?${params.toString()}`);
+
+  if (!response.ok) {
+    throw new GeoapifyRequestError(
+      `Falha na busca de endereço: ${response.status}`,
+      response.status,
+    );
+  }
+
+  return toSuggestions((await response.json()) as GeoapifyResponse);
+}
+
+// Geocoding "completo" da Geoapify (endpoint /search), complementar ao
+// /autocomplete de `searchPlaces` e chamado em paralelo com ele (ver
+// `useGeocodingSearch`): o autocomplete é afinado para digitação por prefixo e
+// devolve pouco; o /search resolve melhor um endereço digitado por inteiro
+// ("Rua 4B chácara 283, Vicente Pires"). Mesma chave, mesmos parâmetros de
+// país/viés, mesma conversão de resposta.
+export async function searchPlacesFullText(
+  query: string,
+  proximity: Coordinates | null,
+): Promise<PlaceSuggestion[]> {
+  const center = proximity ?? DEFAULT_SEARCH_CENTER;
+  const params = new URLSearchParams({
+    text: query,
+    bias: `proximity:${center.lng},${center.lat}`,
+    filter: 'countrycode:br',
+    limit: String(MAX_SUGGESTIONS),
+    lang: 'pt',
+    apiKey: GEOAPIFY_API_KEY,
+  });
+  const response = await fetch(`${SEARCH_URL}?${params.toString()}`);
 
   if (!response.ok) {
     throw new GeoapifyRequestError(

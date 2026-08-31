@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { App } from './App';
 import * as mapboxClient from './services/mapboxClient';
 import * as geoapifyClient from './services/geoapifyClient';
+import * as mapboxGeocodingClient from './services/mapboxGeocodingClient';
 
 const mapConstructorSpy = vi.fn();
 const mapRemoveSpy = vi.fn();
@@ -65,6 +66,10 @@ describe('App', () => {
     mapConstructorSpy.mockClear();
     mapRemoveSpy.mockClear();
     sessionStorage.clear();
+    // Fontes de busca secundárias desligadas por padrão — cada teste mocka a
+    // `searchPlaces` (Geoapify /autocomplete) com o resultado que precisa.
+    vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockResolvedValue([]);
+    vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockResolvedValue([]);
     Object.defineProperty(globalThis.navigator, 'geolocation', {
       value: {
         watchPosition: vi.fn((success: PositionCallback) => {
