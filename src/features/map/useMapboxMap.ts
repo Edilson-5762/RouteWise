@@ -4,10 +4,15 @@ import mapboxgl from 'mapbox-gl';
 import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../../types';
 import { getPuckIconMarkup } from '../../utils/vehicleAvatar';
 import { formatSpeedKmh } from '../../utils/format';
-import { haversineDistanceMeters, signedBearingDelta } from '../../utils/distance';
+import {
+  haversineDistanceMeters,
+  projectOntoRoute,
+  signedBearingDelta,
+} from '../../utils/distance';
 import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
+  buildManeuverArrowGeojson,
   bearingBetween,
 } from './navigationGeometry';
 
@@ -16,6 +21,8 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 const ROUTE_SOURCE_ID = 'route-source';
 const ROUTE_CASING_LAYER_ID = 'route-casing-layer';
 const ROUTE_LAYER_ID = 'route-layer';
+const MANEUVER_ARROW_SOURCE_ID = 'maneuver-arrow-source';
+const MANEUVER_ARROW_LAYER_ID = 'maneuver-arrow-layer';
 const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
 const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
@@ -25,9 +32,16 @@ const NAV_PITCH = 60;
 // Desloca a câmera para o puck ficar bem na parte de baixo da tela (sobra o
 // máximo de trajeto visível à frente), em fração da altura do container.
 const NAV_PUCK_VERTICAL_OFFSET_RATIO = 0.36;
+// O ícone do veículo é desenhado a 46px; durante a navegação ele é ampliado
+// por esta escala para ficar em destaque na linha, como no Waze/Maps.
+const PUCK_ICON_NAV_SCALE = 1.5;
 // Deslocamento mínimo entre dois fixes para deles derivar uma direção de
 // deslocamento confiável (abaixo disso é ruído de GPS parado).
 const TRAVEL_BEARING_MIN_METERS = 4;
+// Se o heading do GPS diverge tanto assim da direção da rota, o usuário
+// provavelmente saiu da pista de verdade — aí a câmera respeita o GPS em vez
+// da tangente da rota.
+const OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
 // Suavização exponencial da rotação da câmera: a cada tick de GPS ela caminha
 // só esta fração do caminho até a direção-alvo, então uma curva vira um giro
 // gradual em vez de um "tranco". Menor = mais suave (e mais lento pra reagir).
@@ -50,6 +64,7 @@ interface UseMapboxMapOptions {
   destination: Coordinates | null;
   route: Route | null;
   isNavigating: boolean;
+  currentStepIndex?: number;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -134,6 +149,7 @@ export function useMapboxMap({
   destination,
   route,
   isNavigating,
+  currentStepIndex = 0,
   headingDegrees,
   theme,
   travelProfile,
@@ -160,6 +176,14 @@ export function useMapboxMap({
   // reajustar fitBounds/layers a cada tick de GPS.
   const originRef = useRef(origin);
   originRef.current = origin;
+  // Lido via ref pela câmera de condução (driveCameraTo) para calcular a
+  // tangente da rota sem recriar o callback a cada (re)desenho da linha.
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  // Lido via ref na criação das camadas da rota (a seta de manobra); as
+  // atualizações a cada tick são responsabilidade do efeito dedicado abaixo.
+  const currentStepIndexRef = useRef(currentStepIndex);
+  currentStepIndexRef.current = currentStepIndex;
   const skipInitialStyleEffectRef = useRef(true);
   // Rastreia se o *estilo em si* (a folha de estilo carregada via
   // construtor/setStyle) já terminou de carregar — ao contrário de
@@ -188,6 +212,10 @@ export function useMapboxMap({
   // Direção da câmera após a suavização (ver CAMERA_BEARING_SMOOTHING) — é ela
   // que a câmera realmente usa, aproximando-se da direção-alvo aos poucos.
   const smoothedBearingRef = useRef<number | null>(null);
+  // Último segmento da rota em que o veículo estava projetado (monotônico) —
+  // limita a janela de busca da projeção a cada tick e evita que uma rota que
+  // passa perto de si mesma bagunce a direção da câmera.
+  const lastRouteSegmentRef = useRef(0);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -319,6 +347,19 @@ export function useMapboxMap({
     }
   }, [travelProfile]);
 
+  // Amplia o ícone do veículo durante a navegação (destaque na linha, como no
+  // Waze/Maps). Escala só o `iconContainer` — o selo de velocidade é irmão dele
+  // e continua no tamanho normal e legível. `transform-origin` central mantém a
+  // âncora do marcador no lugar.
+  useEffect(() => {
+    const iconContainer = puckIconContainerRef.current;
+    if (!iconContainer) {
+      return;
+    }
+    iconContainer.style.transformOrigin = 'center';
+    iconContainer.style.transform = isNavigating ? `scale(${PUCK_ICON_NAV_SCALE})` : 'scale(1)';
+  }, [isNavigating, origin, travelProfile]);
+
   // Mantém o selo "X km/h" do puck em dia com o que o GPS reporta — sempre
   // visível, com "0 km/h" antes de qualquer velocidade real ser reportada,
   // igual ao avatar do Waze na tela inicial (ver `formatSpeedKmh`).
@@ -390,6 +431,12 @@ export function useMapboxMap({
     if (!route) {
       lastRouteFitRef.current = null;
       const clearRoute = () => {
+        if (map.getLayer(MANEUVER_ARROW_LAYER_ID)) {
+          map.removeLayer(MANEUVER_ARROW_LAYER_ID);
+        }
+        if (map.getSource(MANEUVER_ARROW_SOURCE_ID)) {
+          map.removeSource(MANEUVER_ARROW_SOURCE_ID);
+        }
         if (map.getSource(ROUTE_SOURCE_ID)) {
           if (map.getLayer(ROUTE_LAYER_ID)) {
             map.removeLayer(ROUTE_LAYER_ID);
@@ -410,6 +457,12 @@ export function useMapboxMap({
     }
 
     const geojson = routeGeojsonFor(route, originRef.current, isNavigating);
+    const maneuverArrowGeojson = buildManeuverArrowGeojson(
+      route,
+      originRef.current,
+      isNavigating,
+      currentStepIndexRef.current,
+    );
 
     const applyRoute = () => {
       const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
@@ -439,6 +492,43 @@ export function useMapboxMap({
           paint: {
             'line-color': '#2563eb',
             'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 12],
+          },
+        });
+      }
+
+      const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (arrowSource) {
+        arrowSource.setData(maneuverArrowGeojson);
+      } else {
+        map.addSource(MANEUVER_ARROW_SOURCE_ID, {
+          type: 'geojson',
+          data: maneuverArrowGeojson,
+        });
+        // Seta branca (chevron) sobre a linha, no ponto da próxima manobra,
+        // girada para a direção em que a rota segue ali — o "traço" que o
+        // Waze/Maps mostram no centro da curva. `▲` já aponta para o norte, e
+        // `text-rotate` gira no sentido horário a partir daí, casando com o
+        // azimute (0 = norte) guardado na feature.
+        map.addLayer({
+          id: MANEUVER_ARROW_LAYER_ID,
+          type: 'symbol',
+          source: MANEUVER_ARROW_SOURCE_ID,
+          layout: {
+            'text-field': '▲',
+            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
+            'text-size': 26,
+            'text-rotate': ['get', 'bearing'],
+            'text-rotation-alignment': 'map',
+            'text-pitch-alignment': 'map',
+            'text-allow-overlap': true,
+            'text-ignore-placement': true,
+          },
+          paint: {
+            'text-color': '#ffffff',
+            'text-halo-color': '#1d4ed8',
+            'text-halo-width': 2.5,
           },
         });
       }
@@ -487,9 +577,10 @@ export function useMapboxMap({
     // cartão mesmo assim.
   }, [route, theme, isNavigating, chromeInsets]);
 
-  // Redesenha a linha da rota conforme o GPS atualiza, sem repetir
-  // fitBounds/criação de camadas (que já rodaram no efeito acima) — só o
-  // setData. Na navegação isso "consome" o trecho já percorrido a cada avanço.
+  // Redesenha a linha da rota e a seta de manobra conforme o GPS atualiza, sem
+  // repetir fitBounds/criação de camadas (que já rodaram no efeito acima) — só
+  // o setData. Na navegação isso "consome" o trecho já percorrido a cada avanço
+  // e faz a seta aparecer/sumir conforme a curva se aproxima.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !route) {
@@ -499,7 +590,15 @@ export function useMapboxMap({
     if (source) {
       source.setData(routeGeojsonFor(route, origin, isNavigating));
     }
-  }, [route, origin, isNavigating]);
+    const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
+      | mapboxgl.GeoJSONSource
+      | undefined;
+    if (arrowSource) {
+      arrowSource.setData(
+        buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex),
+      );
+    }
+  }, [route, origin, isNavigating, currentStepIndex]);
 
   // Aplica a câmera de condução (visão "no capô") centrada em `position`:
   // zoom de perto, inclinada, girada para a direção de deslocamento e com o
@@ -512,12 +611,38 @@ export function useMapboxMap({
       }
       lastCameraPositionRef.current = position;
 
-      // Direção-alvo: prioriza o heading real do GPS (já suavizado pelo
-      // aparelho e disponível só em movimento); sem ele, a direção derivada de
-      // dois fixes; por último, mantém a direção atual do mapa. Antes a
-      // ordem começava pela direção derivada de dois fixes — que, quando o GPS
-      // entregava um lote atrasado, dava um giro de ~90° de uma vez ("tranco").
-      const targetBearing = headingDegrees ?? lastTravelBearingRef.current ?? map.getBearing();
+      // Direção-alvo da câmera:
+      //  - navegando com rota: a TANGENTE da rota no ponto onde o veículo está
+      //    (a direção da própria rua à frente). É sempre definida, mesmo parado
+      //    ou andando devagar — é o que dá a visão "atrás do veículo, rua
+      //    acima" do Waze/Maps, em vez de a câmera apontar para um lado quando
+      //    o GPS não reporta heading. O heading do GPS só assume quando diverge
+      //    muito da rota (usuário saiu da pista de verdade).
+      //  - sem rota: heading do GPS, senão direção derivada de dois fixes.
+      let targetBearing: number;
+      const routeGeometry = routeRef.current?.geometry;
+      if (isNavigating && routeGeometry && routeGeometry.length >= 2) {
+        const projection = projectOntoRoute(position, routeGeometry, {
+          fromIndex: lastRouteSegmentRef.current - 3,
+          toIndex: lastRouteSegmentRef.current + 60,
+        });
+        lastRouteSegmentRef.current = Math.max(
+          lastRouteSegmentRef.current,
+          projection.segmentIndex,
+        );
+        const routeBearing = bearingBetween(
+          routeGeometry[projection.segmentIndex],
+          routeGeometry[projection.segmentIndex + 1],
+        );
+        targetBearing =
+          headingDegrees != null &&
+          Math.abs(signedBearingDelta(routeBearing, headingDegrees)) >
+            OFF_ROUTE_HEADING_DIVERGENCE_DEGREES
+            ? headingDegrees
+            : routeBearing;
+      } else {
+        targetBearing = headingDegrees ?? lastTravelBearingRef.current ?? map.getBearing();
+      }
 
       // Primeira volta encaixa direto na direção-alvo; nas seguintes, caminha
       // só CAMERA_BEARING_SMOOTHING do caminho até ela — giro gradual.
@@ -540,7 +665,7 @@ export function useMapboxMap({
         duration: 700,
       });
     },
-    [headingDegrees, containerRef],
+    [headingDegrees, containerRef, isNavigating],
   );
 
   useEffect(() => {
@@ -558,9 +683,15 @@ export function useMapboxMap({
       lastCameraPositionRef.current = null;
       lastTravelBearingRef.current = null;
       smoothedBearingRef.current = null;
+      lastRouteSegmentRef.current = 0;
       map.easeTo({ pitch: 0, bearing: 0, offset: [0, 0], duration: 500 });
     }
   }, [origin, isNavigating, headingDegrees, isFollowingUser, driveCameraTo]);
+
+  // Uma rota nova (plano/recálculo) recomeça o progresso da câmera do zero.
+  useEffect(() => {
+    lastRouteSegmentRef.current = 0;
+  }, [route]);
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um
   // toque sem querer com o celular na mão), a câmera volta a seguir sozinha

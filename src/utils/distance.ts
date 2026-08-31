@@ -79,6 +79,8 @@ export interface RouteProjection {
   segmentIndex: number;
   /** Distância acumulada, ao longo da rota, até a projeção do ponto (metros). */
   alongMeters: number;
+  /** O ponto projetado SOBRE a polilinha (o "grudado na pista"). */
+  point: Coordinates;
 }
 
 // Projeta `point` sobre a polilinha `line` medindo a distância PERPENDICULAR a
@@ -92,7 +94,12 @@ export function projectOntoRoute(
   window?: { fromIndex?: number; toIndex?: number },
 ): RouteProjection {
   if (line.length < 2) {
-    return { distanceMeters: 0, segmentIndex: 0, alongMeters: 0 };
+    return {
+      distanceMeters: 0,
+      segmentIndex: 0,
+      alongMeters: 0,
+      point: line[0] ?? point,
+    };
   }
 
   const fromIndex = Math.max(0, Math.min(window?.fromIndex ?? 0, line.length - 2));
@@ -119,10 +126,20 @@ export function projectOntoRoute(
     const segLen = haversineDistanceMeters(a, b);
 
     if (!best || distanceMeters < best.distanceMeters) {
-      best = { distanceMeters, segmentIndex: i, alongMeters: prefixMeters + t * segLen };
+      best = {
+        distanceMeters,
+        segmentIndex: i,
+        alongMeters: prefixMeters + t * segLen,
+        // Interpolação linear em lat/lng no segmento — coerente com a
+        // aproximação planar usada acima e suficiente nesta escala.
+        point: {
+          lat: a.lat + (b.lat - a.lat) * t,
+          lng: a.lng + (b.lng - a.lng) * t,
+        },
+      };
     }
     prefixMeters += segLen;
   }
 
-  return best ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0 };
+  return best ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0, point };
 }

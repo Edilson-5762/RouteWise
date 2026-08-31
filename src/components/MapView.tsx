@@ -15,6 +15,7 @@ interface MapViewProps {
   destination: Coordinates | null;
   route: Route | null;
   isNavigating: boolean;
+  currentStepIndex?: number;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -28,6 +29,7 @@ export function MapView({
   destination,
   route,
   isNavigating,
+  currentStepIndex,
   headingDegrees,
   theme,
   travelProfile,
@@ -42,6 +44,7 @@ export function MapView({
     destination,
     route,
     isNavigating,
+    currentStepIndex,
     headingDegrees,
     theme,
     travelProfile,

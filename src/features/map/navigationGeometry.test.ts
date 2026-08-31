@@ -39,9 +39,13 @@ describe('buildRouteGeojson (planejamento)', () => {
 });
 
 describe('buildNavigationRouteGeojson (navegação)', () => {
-  it('começa a linha exatamente na posição atual do veículo', () => {
+  it('começa a linha no ponto PROJETADO sobre a rota (colado na pista), não na posição crua do GPS', () => {
+    // GPS ~1 m a leste da rota (que é reta em lng 0): a linha tem que começar
+    // em lng 0 (na pista), na mesma latitude — nunca no lng 0.00001 do GPS.
     const feature = buildNavigationRouteGeojson(route, { lat: 0.00205, lng: 0.00001 });
-    expect(feature.geometry.coordinates[0]).toEqual([0.00001, 0.00205]);
+    const [lng, lat] = feature.geometry.coordinates[0];
+    expect(lng).toBeCloseTo(0, 6);
+    expect(lat).toBeCloseTo(0.00205, 4);
   });
 
   it('descarta o trecho já percorrido (do ponto mais próximo até o fim)', () => {

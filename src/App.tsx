@@ -212,6 +212,7 @@ export function App() {
           destination={state.destination}
           route={state.route}
           isNavigating={state.status === 'navigating'}
+          currentStepIndex={state.currentStepIndex}
           headingDegrees={geolocation.headingDegrees}
           theme={theme}
           travelProfile={state.travelProfile}

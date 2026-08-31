@@ -678,8 +678,13 @@ describe('useMapboxMap', () => {
     rerender({ origin: movedOrigin });
 
     expect(setDataMock).toHaveBeenCalled();
-    const lastCall = setDataMock.mock.calls.at(-1)?.[0] as GeoJSON.Feature<GeoJSON.LineString>;
-    expect(lastCall.geometry.coordinates[0]).toEqual([movedOrigin.lng, movedOrigin.lat]);
+    // Além da linha da rota (Feature/LineString), o mesmo setData é usado pela
+    // source da seta de manobra (FeatureCollection) — pega só a chamada da linha.
+    const lineCall = setDataMock.mock.calls
+      .map((call) => call[0] as GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection)
+      .filter((data): data is GeoJSON.Feature<GeoJSON.LineString> => data.type === 'Feature')
+      .at(-1);
+    expect(lineCall?.geometry.coordinates[0]).toEqual([movedOrigin.lng, movedOrigin.lat]);
     expect(fitBoundsMock).not.toHaveBeenCalled();
   });
 

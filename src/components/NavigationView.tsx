@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
@@ -30,8 +30,23 @@ export function NavigationView({
   onArrivalDone,
   onExitApp,
 }: NavigationViewProps) {
-  const currentStep = state.route?.steps[state.currentStepIndex] ?? null;
-  const voice = useVoiceGuidance(currentStep?.instruction ?? null, {
+  // A manobra do passo `i` acontece no INÍCIO dele; enquanto se percorre o
+  // passo `currentStepIndex`, o que interessa mostrar e falar é a PRÓXIMA
+  // manobra (a que você ainda vai fazer), com a distância que falta até ela.
+  const stepCount = state.route?.steps.length ?? 0;
+  const upcomingStepIndex =
+    stepCount > 0 ? Math.min(state.currentStepIndex + 1, stepCount - 1) : 0;
+  const currentStep = state.route?.steps[upcomingStepIndex] ?? null;
+  const currentStepInstruction = currentStep?.instruction ?? null;
+
+  const upcomingManeuver = useMemo(
+    () =>
+      currentStepInstruction
+        ? { instruction: currentStepInstruction, key: String(upcomingStepIndex) }
+        : null,
+    [currentStepInstruction, upcomingStepIndex],
+  );
+  const voice = useVoiceGuidance(upcomingManeuver, state.distanceToManeuverMeters, {
     enabled: state.status === 'navigating',
   });
   // Impede a tela de apagar durante o trajeto — sem isso o bloqueio automático
