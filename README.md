@@ -143,6 +143,18 @@ precisam vir sempre da rede.
 - [Geoapify Places API](https://apidocs.geoapify.com/docs/places/) — busca por categoria de estabelecimento e pontos de interesse próximos
 - _(O Geocoding do Mapbox foi testado e descartado: limitado demais para achar endereços específicos e nomes de negócios no Brasil.)_
 
+**Fontes de dados embutidas (sem rede em runtime)**
+
+- [CNES / DATASUS](https://cnes.datasus.gov.br/) — cadastro de domínio
+  público de onde é destilado `src/data/dfHealthUnits.generated.ts`, a
+  lista local de unidades públicas de saúde do DF (UBS, postos,
+  hospitais regionais, UPAs, CAPS) que o OpenStreetMap/Mapbox não
+  cobrem. A busca de destino consulta essa lista em memória e mostra os
+  acertos no topo. Regeração **manual e opcional**: `npm run
+generate:unidades-saude` (o arquivo já vem versionado; o app não baixa
+  nada em runtime nem no build). Correções pontuais de nome/coordenada
+  ficam em `scripts/data/unidades-saude.overrides.json`.
+
 **APIs do navegador**
 
 - Geolocation API (`watchPosition`) — posição, velocidade e heading
@@ -394,18 +406,19 @@ _"Adicionar à tela inicial"_ no menu do navegador.
 
 ## Scripts disponíveis
 
-| Comando                       | Descrição                                                          |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `npm run dev`                 | Servidor de desenvolvimento (<http://localhost:5173>)              |
-| `npm run build`               | Build de produção (`tsc -b` + `vite build`)                        |
-| `npm run preview`             | Serve a build de produção localmente                               |
-| `npm run test`                | Roda a suíte de testes (Vitest)                                    |
-| `npm run test:watch`          | Testes em modo _watch_                                             |
-| `npm run lint`                | ESLint                                                             |
-| `npm run format`              | Formata o código com Prettier                                      |
-| `npm run format:check`        | Verifica a formatação (usado no CI)                                |
-| `npm run generate:pwa-assets` | Regera favicon e ícones de PWA a partir de `public/logo.svg`       |
-| `npm run generate:og`         | Regera `public/og-card.png` a partir de `assets/brand/og-card.svg` |
+| Comando                           | Descrição                                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Servidor de desenvolvimento (<http://localhost:5173>)                                     |
+| `npm run build`                   | Build de produção (`tsc -b` + `vite build`)                                               |
+| `npm run preview`                 | Serve a build de produção localmente                                                      |
+| `npm run test`                    | Roda a suíte de testes (Vitest)                                                           |
+| `npm run test:watch`              | Testes em modo _watch_                                                                    |
+| `npm run lint`                    | ESLint                                                                                    |
+| `npm run format`                  | Formata o código com Prettier                                                             |
+| `npm run format:check`            | Verifica a formatação (usado no CI)                                                       |
+| `npm run generate:pwa-assets`     | Regera favicon e ícones de PWA a partir de `public/logo.svg`                              |
+| `npm run generate:og`             | Regera `public/og-card.png` a partir de `assets/brand/og-card.svg`                        |
+| `npm run generate:unidades-saude` | Regera `src/data/dfHealthUnits.generated.ts` a partir do CNES/DATASUS (manual e opcional) |
 
 ---
 
