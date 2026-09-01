@@ -6,6 +6,7 @@ import {
   searchPlacesFullText,
 } from '../../services/geoapifyClient';
 import { searchPlacesMapbox } from '../../services/mapboxGeocodingClient';
+import { searchDfHealthUnits } from '../../data/dfHealthUnits';
 import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
@@ -63,14 +64,20 @@ function interleave(lists: PlaceSuggestion[][]): PlaceSuggestion[] {
 }
 
 // Busca em várias fontes ao mesmo tempo e mescla:
+//  - Cadastro local de unidades de saúde do DF (CNES embutido) → busca em
+//    memória, sem rede; acertos entram NO TOPO da lista;
 //  - Geoapify /autocomplete + Geoapify /search + Mapbox geocoder → busca por
 //    TEXTO (o nome/endereço específico que a pessoa digitou);
 //  - Geoapify Places por categoria → só quando a query bate com um tipo de
 //    estabelecimento (farmácia, banco, academia...), e só para COMPLETAR as
 //    vagas que sobrarem — um "Bradesco" digitado tem que vir antes de uma
 //    agência genérica mais próxima.
-// Uma fonte fora do ar não derruba a busca: só é erro se TODAS falharem.
+// Uma fonte fora do ar não derruba a busca: só é erro se TODAS as remotas
+// falharem E a busca local também não achar nada.
 async function search(query: string, proximity: Coordinates | null): Promise<PlaceSuggestion[]> {
+  // Fonte local: síncrona, sem rede — não entra na conta de "tudo falhou".
+  const localUnits = searchDfHealthUnits(query, proximity);
+
   const category = matchPlaceCategory(query);
 
   // Só as fontes que a gente de fato tentou entram na conta de "tudo falhou" —
@@ -85,7 +92,7 @@ async function search(query: string, proximity: Coordinates | null): Promise<Pla
   }
 
   const outcomes = await Promise.allSettled(tasks);
-  if (outcomes.every((outcome) => outcome.status === 'rejected')) {
+  if (outcomes.every((outcome) => outcome.status === 'rejected') && localUnits.length === 0) {
     throw (outcomes[0] as PromiseRejectedResult).reason;
   }
 
@@ -100,7 +107,10 @@ async function search(query: string, proximity: Coordinates | null): Promise<Pla
     (suggestion) => !seen.has(proximityKey(suggestion)),
   );
 
-  return [...byText, ...byCategory].slice(0, MAX_SUGGESTIONS);
+  // Unidades locais primeiro; a deduplicação por proximidade descarta a
+  // versão remota de uma unidade que a local já trouxe (a local tem
+  // rótulo melhor).
+  return dedupeByProximity([...localUnits, ...byText, ...byCategory]).slice(0, MAX_SUGGESTIONS);
 }
 
 export function useGeocodingSearch(query: string, proximity?: Coordinates | null) {

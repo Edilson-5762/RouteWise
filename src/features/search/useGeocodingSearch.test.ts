@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 import { useGeocodingSearch } from './useGeocodingSearch';
 import * as geoapifyClient from '../../services/geoapifyClient';
 import * as mapboxGeocodingClient from '../../services/mapboxGeocodingClient';
+import * as dfHealthUnits from '../../data/dfHealthUnits';
 
 describe('useGeocodingSearch', () => {
   beforeEach(() => {
@@ -247,5 +248,92 @@ describe('useGeocodingSearch', () => {
       placeName: 'São Paulo',
       coordinates: { lat: -23.5505, lng: -46.6333 },
     });
+  });
+
+  it('põe as unidades de saúde locais no topo, antes dos resultados remotos', async () => {
+    vi.spyOn(dfHealthUnits, 'searchDfHealthUnits').mockReturnValue([
+      {
+        id: 'cnes-2',
+        placeName: 'UBS 02 Guará, Brasília - DF',
+        coordinates: { lat: -15.833, lng: -47.973 },
+      },
+    ]);
+    // "UBS ..." casa com a categoria Clínica — mock para a task não fazer rede.
+    vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([]);
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'geo-x', placeName: 'Guará, DF', coordinates: { lat: -15.82, lng: -47.98 } },
+    ]);
+
+    const { result } = renderHook(() => useGeocodingSearch('UBS 2 Guará'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['cnes-2', 'geo-x']);
+  });
+
+  it('não duplica uma unidade local que também volta de uma fonte remota (a local vence)', async () => {
+    vi.spyOn(dfHealthUnits, 'searchDfHealthUnits').mockReturnValue([
+      {
+        id: 'cnes-2',
+        placeName: 'UBS 02 Guará (local)',
+        coordinates: { lat: -15.8327, lng: -47.9732 },
+      },
+    ]);
+    vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([]);
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      {
+        id: 'geo-dup',
+        placeName: 'UBS 02 do Guará (Geoapify)',
+        coordinates: { lat: -15.83271, lng: -47.97319 },
+      },
+    ]);
+
+    const { result } = renderHook(() => useGeocodingSearch('UBS 2 Guará'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['cnes-2']);
+  });
+
+  it('não reporta erro se as fontes remotas falham mas a busca local achou algo', async () => {
+    vi.spyOn(dfHealthUnits, 'searchDfHealthUnits').mockReturnValue([
+      {
+        id: 'cnes-2',
+        placeName: 'UBS 02 Guará',
+        coordinates: { lat: -15.833, lng: -47.973 },
+      },
+    ]);
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockRejectedValue(new Error('geoapify fora'));
+    vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockRejectedValue(new Error('geoapify fora'));
+    vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockRejectedValue(
+      new Error('geoapify fora'),
+    );
+    vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockRejectedValue(
+      new Error('mapbox fora'),
+    );
+
+    const { result } = renderHook(() => useGeocodingSearch('UBS 2 Guará'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['cnes-2']);
+  });
+
+  it('query sem match local mantém o comportamento atual (só fontes remotas)', async () => {
+    vi.spyOn(dfHealthUnits, 'searchDfHealthUnits').mockReturnValue([]);
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'geo-1', placeName: 'São Paulo', coordinates: { lat: -23.55, lng: -46.63 } },
+    ]);
+
+    const { result } = renderHook(() => useGeocodingSearch('São Paulo'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1']);
   });
 });
