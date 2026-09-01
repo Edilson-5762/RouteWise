@@ -120,12 +120,7 @@ export function buildNavigationRouteGeojson(
     return lineFeature(coordinates);
   }
 
-  const behind = walkAlong(
-    route.geometry,
-    projection.segmentIndex,
-    NAV_LINE_BACKTRACK_METERS,
-    -1,
-  )
+  const behind = walkAlong(route.geometry, projection.segmentIndex, NAV_LINE_BACKTRACK_METERS, -1)
     .reverse()
     .map((p) => [p.lng, p.lat] as [number, number]);
 

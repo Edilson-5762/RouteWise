@@ -74,12 +74,24 @@ describe('useGeocodingSearch', () => {
   it('mescla resultados da Geoapify e do Mapbox, intercalando as fontes e sem duplicar o mesmo lugar', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
       { id: 'geo-1', placeName: 'Rua 4B (Geoapify)', coordinates: { lat: -15.811, lng: -48.018 } },
-      { id: 'geo-2', placeName: 'Studio Rea (Geoapify)', coordinates: { lat: -15.8125, lng: -48.02 } },
+      {
+        id: 'geo-2',
+        placeName: 'Studio Rea (Geoapify)',
+        coordinates: { lat: -15.8125, lng: -48.02 },
+      },
     ]);
     vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockResolvedValue([
       // Mesmo lugar que geo-2 (coordenadas ~iguais) — deve ser deduplicado.
-      { id: 'mapbox:a', placeName: 'Studio Rea (Mapbox)', coordinates: { lat: -15.81251, lng: -48.02001 } },
-      { id: 'mapbox:b', placeName: 'Chácara 283 (Mapbox)', coordinates: { lat: -15.813, lng: -48.017 } },
+      {
+        id: 'mapbox:a',
+        placeName: 'Studio Rea (Mapbox)',
+        coordinates: { lat: -15.81251, lng: -48.02001 },
+      },
+      {
+        id: 'mapbox:b',
+        placeName: 'Chácara 283 (Mapbox)',
+        coordinates: { lat: -15.813, lng: -48.017 },
+      },
     ]);
 
     const { result } = renderHook(() => useGeocodingSearch('rua 4b vicente pires'));
@@ -152,7 +164,11 @@ describe('useGeocodingSearch', () => {
       })),
     );
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-      { id: 'bonanza', placeName: 'Panificadora Bonanza', coordinates: { lat: -15.79, lng: -47.89 } },
+      {
+        id: 'bonanza',
+        placeName: 'Panificadora Bonanza',
+        coordinates: { lat: -15.79, lng: -47.89 },
+      },
     ]);
 
     const { result } = renderHook(() => useGeocodingSearch('panificadora bonanza'));
@@ -181,7 +197,9 @@ describe('useGeocodingSearch', () => {
   it('só reporta erro quando TODAS as fontes de busca falham', async () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockRejectedValue(new Error('geoapify fora'));
     vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockRejectedValue(new Error('geoapify fora'));
-    vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockRejectedValue(new Error('mapbox fora'));
+    vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockRejectedValue(
+      new Error('mapbox fora'),
+    );
 
     const { result } = renderHook(() => useGeocodingSearch('qualquer coisa'));
 
@@ -196,7 +214,11 @@ describe('useGeocodingSearch', () => {
     vi.spyOn(geoapifyClient, 'searchPlaces').mockRejectedValue(new Error('geoapify fora'));
     vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockRejectedValue(new Error('geoapify fora'));
     vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockResolvedValue([
-      { id: 'mapbox:x', placeName: 'Só o Mapbox respondeu', coordinates: { lat: -15.8, lng: -47.9 } },
+      {
+        id: 'mapbox:x',
+        placeName: 'Só o Mapbox respondeu',
+        coordinates: { lat: -15.8, lng: -47.9 },
+      },
     ]);
 
     const { result } = renderHook(() => useGeocodingSearch('qualquer coisa'));

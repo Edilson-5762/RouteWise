@@ -94,9 +94,7 @@ async function search(query: string, proximity: Coordinates | null): Promise<Pla
       ? (outcomes[index] as PromiseFulfilledResult<PlaceSuggestion[]>).value
       : [];
 
-  const byText = dedupeByProximity(
-    interleave([resultOf(0), resultOf(2), resultOf(1)]),
-  );
+  const byText = dedupeByProximity(interleave([resultOf(0), resultOf(2), resultOf(1)]));
   const seen = new Set(byText.map(proximityKey));
   const byCategory = dedupeByProximity(category ? resultOf(3) : []).filter(
     (suggestion) => !seen.has(proximityKey(suggestion)),
