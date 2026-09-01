@@ -81,6 +81,40 @@ describe('MapView', () => {
     expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
   });
 
+  it('mostra o ícone fixo do veículo só durante a navegação', () => {
+    const { rerender } = render(
+      <MapView
+        origin={{ lat: -23.5505, lng: -46.6333 }}
+        destination={null}
+        route={null}
+        isNavigating={false}
+        headingDegrees={null}
+        theme="light"
+        travelProfile="driving"
+        speedMetersPerSecond={null}
+        onDestinationSelected={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('nav-vehicle')).not.toBeInTheDocument();
+
+    rerender(
+      <MapView
+        origin={{ lat: -23.5505, lng: -46.6333 }}
+        destination={null}
+        route={null}
+        isNavigating
+        headingDegrees={null}
+        theme="light"
+        travelProfile="driving"
+        speedMetersPerSecond={8}
+        onDestinationSelected={vi.fn()}
+      />,
+    );
+    const vehicle = screen.getByTestId('nav-vehicle');
+    expect(vehicle).toBeInTheDocument();
+    expect(vehicle).toHaveTextContent('29 km/h');
+  });
+
   it('mostra o botão de centralizar quando o usuário arrasta o mapa durante a navegação, e some ao clicar', () => {
     movestartHandler = null;
     render(

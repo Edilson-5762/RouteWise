@@ -42,4 +42,11 @@ describe('matchPlaceCategory', () => {
     expect(matchPlaceCategory('posto de saúde')?.categoryLabel).toBe('Clínica');
     expect(matchPlaceCategory('órgão público')?.categoryLabel).toBe('Órgão público');
   });
+
+  it('reconhece "UBS" e variações como categoria Clínica (postos de saúde do DF)', () => {
+    expect(matchPlaceCategory('UBS')?.categoryLabel).toBe('Clínica');
+    expect(matchPlaceCategory('UBS 01 Guará')?.categoryLabel).toBe('Clínica');
+    expect(matchPlaceCategory('unidade de saúde')?.categoryLabel).toBe('Clínica');
+    expect(matchPlaceCategory('Clínica')?.geoapifyCategory).toContain('healthcare');
+  });
 });

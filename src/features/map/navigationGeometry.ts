@@ -1,6 +1,12 @@
-import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
+import type { Feature, FeatureCollection, LineString } from 'geojson';
 import type { Coordinates, Route } from '../../types';
-import { bearingBetween, haversineDistanceMeters, projectOntoRoute } from '../../utils/distance';
+import {
+  bearingBetween,
+  findNearestPointIndex,
+  haversineDistanceMeters,
+  projectOntoRoute,
+  type RouteProjection,
+} from '../../utils/distance';
 
 // Reexportado daqui por compatibilidade: a implementação canônica agora vive em
 // `utils/distance` (também usada pelo navigationReducer, que não deve depender
@@ -8,7 +14,14 @@ import { bearingBetween, haversineDistanceMeters, projectOntoRoute } from '../..
 export { bearingBetween };
 
 // A partir de quantos metros da manobra a seta (chevron) sobre a linha some.
-const MANEUVER_ARROW_VISIBLE_WITHIN_METERS = 170;
+const MANEUVER_ARROW_VISIBLE_WITHIN_METERS = 180;
+// Quanto da rota a seta desenha de cada lado do ponto da manobra — o bastante
+// para o "L" da curva aparecer.
+const MANEUVER_ARROW_BEFORE_METERS = 26;
+const MANEUVER_ARROW_AFTER_METERS = 34;
+
+// ~1 cm — dedup de pontos praticamente coincidentes.
+const COINCIDENT_EPSILON_DEGREES = 1e-7;
 
 function lineFeature(coordinates: [number, number][]): Feature<LineString> {
   return {
@@ -18,14 +31,10 @@ function lineFeature(coordinates: [number, number][]): Feature<LineString> {
   };
 }
 
-// ~1 cm — dedup de pontos praticamente coincidentes (ex.: o ponto projetado
-// cai exatamente sobre um vértice da rota, que também seria o primeiro ponto
-// "à frente").
-const COINCIDENT_EPSILON_DEGREES = 1e-7;
+const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 function dropLeadingDuplicate(coordinates: [number, number][]): [number, number][] {
-  // `>= 3`: nunca reduz a linha para menos de 2 pontos (colado no destino,
-  // `forward` já tem só 2, ambos ~iguais — melhor manter os 2 do que virar 1).
+  // `>= 3`: nunca reduz a linha para menos de 2 pontos.
   if (
     coordinates.length >= 3 &&
     Math.abs(coordinates[0][0] - coordinates[1][0]) < COINCIDENT_EPSILON_DEGREES &&
@@ -35,8 +44,6 @@ function dropLeadingDuplicate(coordinates: [number, number][]): [number, number]
   }
   return coordinates;
 }
-
-const EMPTY_FEATURE_COLLECTION: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 // Linha da rota para o MODO PLANEJAMENTO: mostra o trajeto inteiro e emenda a
 // origem real do usuário no começo (a Directions API "gruda" a origem na via
@@ -61,23 +68,21 @@ export function buildRouteGeojson(
 }
 
 // Linha da rota para o MODO NAVEGAÇÃO: só o que está À FRENTE, e SEMPRE colada
-// na pista. O começo da linha é a PROJEÇÃO do veículo sobre a rota (o ponto
-// exato em cima da rua), não a posição crua do GPS — assim a linha nunca sai da
-// via nem "corta" a curva ligando o puck a um vértice adiante. O veículo é que
-// anda por cima da linha; a linha segue a geometria real da rua até o destino.
+// na pista. Recebe a PROJEÇÃO do veículo sobre a rota já calculada pelo chamador
+// (com janela restrita ao progresso real — ver `useMapboxMap`), o que evita que
+// uma rota que passa perto de si mesma "grude" o ponto num trecho distante e a
+// linha vire um toco. O começo da linha é o ponto projetado (em cima da rua),
+// não a posição crua do GPS; o veículo é que fica sobre a linha.
 export function buildNavigationRouteGeojson(
   route: Route,
-  currentPosition: Coordinates | null,
+  projection: RouteProjection | null,
 ): Feature<LineString> {
   const coordinates: [number, number][] = route.geometry.map((point) => [point.lng, point.lat]);
-  if (!currentPosition || coordinates.length < 2) {
+  if (!projection || coordinates.length < 2) {
     return lineFeature(coordinates);
   }
 
-  const projection = projectOntoRoute(currentPosition, route.geometry);
   const snapped: [number, number] = [projection.point.lng, projection.point.lat];
-  // Vértices da rota ainda à frente do ponto projetado (o do segmento atual já
-  // foi "consumido"; começa no próximo).
   const ahead = coordinates.slice(projection.segmentIndex + 1);
   const forward: [number, number][] =
     ahead.length > 0 ? [snapped, ...ahead] : [snapped, coordinates[coordinates.length - 1]];
@@ -85,50 +90,95 @@ export function buildNavigationRouteGeojson(
   return lineFeature(dropLeadingDuplicate(forward));
 }
 
-// Seta branca (chevron) desenhada SOBRE a linha, no ponto da próxima manobra,
-// apontando na direção em que a rota segue ali — o "traço" que o Waze/Maps
-// mostram no centro da curva/rotatória. Devolve 0 ou 1 ponto: some quando não
-// há manobra à frente (último trecho/chegada) ou quando ela ainda está longe.
+// Caminha ao longo da geometria a partir de `fromIndex`, acumulando distância,
+// até somar ~`meters` (ou acabar a geometria). `direction` = +1 para frente,
+// -1 para trás. Devolve os pontos percorridos, do mais próximo de `fromIndex`
+// para o mais distante.
+function walkAlong(
+  geometry: Coordinates[],
+  fromIndex: number,
+  meters: number,
+  direction: 1 | -1,
+): [number, number][] {
+  const points: [number, number][] = [];
+  let accumulated = 0;
+  let i = fromIndex;
+  while (accumulated < meters) {
+    const next = i + direction;
+    if (next < 0 || next >= geometry.length) {
+      break;
+    }
+    accumulated += haversineDistanceMeters(geometry[i], geometry[next]);
+    points.push([geometry[next].lng, geometry[next].lat]);
+    i = next;
+  }
+  return points;
+}
+
+// Seta que TRAÇA a curva sobre a linha da rota, do trecho antes da manobra até
+// o depois — o "L" do Waze/Maps, não uma flecha reta. É desenhada como uma
+// LineString curta que segue a geometria real da rua; a camada de símbolos (ver
+// `useMapboxMap`) repete um "▶" ao longo dela, então as pontas acompanham a
+// direção da via e dobram na esquina. 0 ou 1 feature: some quando não há
+// manobra à frente (último trecho/chegada) ou quando ela ainda está longe.
 export function buildManeuverArrowGeojson(
   route: Route | null,
   currentPosition: Coordinates | null,
   isNavigating: boolean,
   currentStepIndex: number,
-): FeatureCollection<Point> {
+): FeatureCollection<LineString> {
+  const empty = EMPTY_FEATURE_COLLECTION as FeatureCollection<LineString>;
   if (!route || !isNavigating || !currentPosition || route.geometry.length < 2) {
-    return EMPTY_FEATURE_COLLECTION as FeatureCollection<Point>;
+    return empty;
   }
 
   // A manobra do passo `i` acontece no INÍCIO dele; enquanto se percorre o
   // passo `currentStepIndex`, a PRÓXIMA manobra é a do passo seguinte.
   const upcoming = route.steps[currentStepIndex + 1];
   if (!upcoming) {
-    return EMPTY_FEATURE_COLLECTION as FeatureCollection<Point>;
+    return empty;
   }
 
   const distanceToManeuver = haversineDistanceMeters(currentPosition, upcoming.maneuverLocation);
   if (distanceToManeuver > MANEUVER_ARROW_VISIBLE_WITHIN_METERS) {
-    return EMPTY_FEATURE_COLLECTION as FeatureCollection<Point>;
+    return empty;
   }
 
-  // Direção (azimute) da rota no ponto da manobra: a seta aponta para onde
-  // seguir atravessando a curva.
-  const atManeuver = projectOntoRoute(upcoming.maneuverLocation, route.geometry);
-  const a = route.geometry[atManeuver.segmentIndex];
-  const b = route.geometry[atManeuver.segmentIndex + 1];
-  const bearing = bearingBetween(a, b);
+  // Vértice da geometria mais próximo do ponto da manobra: a curva "gira" ali.
+  const cornerIndex = findNearestPointIndex(upcoming.maneuverLocation, route.geometry);
+  const before = walkAlong(
+    route.geometry,
+    cornerIndex,
+    MANEUVER_ARROW_BEFORE_METERS,
+    -1,
+  ).reverse();
+  const after = walkAlong(route.geometry, cornerIndex, MANEUVER_ARROW_AFTER_METERS, 1);
+  const corner: [number, number] = [
+    route.geometry[cornerIndex].lng,
+    route.geometry[cornerIndex].lat,
+  ];
+  const path = [...before, corner, ...after];
+  if (path.length < 2) {
+    return empty;
+  }
 
   return {
     type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: { bearing },
-        geometry: {
-          type: 'Point',
-          coordinates: [upcoming.maneuverLocation.lng, upcoming.maneuverLocation.lat],
-        },
-      },
-    ],
+    features: [lineFeature(path)],
   };
+}
+
+// Projeção do veículo sobre a rota, restrita a uma janela à frente do progresso
+// já registrado — o mesmo cuidado do reducer, mas aqui para a camada de mapa
+// (linha + câmera). Sem a janela, uma rota que passa perto de si mesma casava o
+// ponto num trecho distante e a linha desenhada virava um toco.
+export function projectVehicleOntoRoute(
+  route: Route,
+  position: Coordinates,
+  progressSegmentIndex: number,
+): RouteProjection {
+  return projectOntoRoute(position, route.geometry, {
+    fromIndex: progressSegmentIndex - 3,
+    toIndex: progressSegmentIndex + 80,
+  });
 }

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
+  buildManeuverArrowGeojson,
+  projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
 import type { Route } from '../../types';
@@ -42,15 +44,16 @@ describe('buildNavigationRouteGeojson (navegação)', () => {
   it('começa a linha no ponto PROJETADO sobre a rota (colado na pista), não na posição crua do GPS', () => {
     // GPS ~1 m a leste da rota (que é reta em lng 0): a linha tem que começar
     // em lng 0 (na pista), na mesma latitude — nunca no lng 0.00001 do GPS.
-    const feature = buildNavigationRouteGeojson(route, { lat: 0.00205, lng: 0.00001 });
+    const projection = projectVehicleOntoRoute(route, { lat: 0.00205, lng: 0.00001 }, 0);
+    const feature = buildNavigationRouteGeojson(route, projection);
     const [lng, lat] = feature.geometry.coordinates[0];
     expect(lng).toBeCloseTo(0, 6);
     expect(lat).toBeCloseTo(0.00205, 4);
   });
 
-  it('descarta o trecho já percorrido (do ponto mais próximo até o fim)', () => {
-    // Perto do 3º ponto (lat 0.002): sobra ele + os 2 seguintes.
-    const feature = buildNavigationRouteGeojson(route, { lat: 0.002, lng: 0 });
+  it('descarta o trecho já percorrido (do ponto projetado até o fim)', () => {
+    const projection = projectVehicleOntoRoute(route, { lat: 0.002, lng: 0 }, 0);
+    const feature = buildNavigationRouteGeojson(route, projection);
     expect(feature.geometry.coordinates).toHaveLength(3);
     expect(feature.geometry.coordinates[feature.geometry.coordinates.length - 1]).toEqual([
       0, 0.004,
@@ -58,13 +61,97 @@ describe('buildNavigationRouteGeojson (navegação)', () => {
   });
 
   it('mantém pelo menos 2 pontos mesmo colado no destino', () => {
-    const feature = buildNavigationRouteGeojson(route, { lat: 0.004, lng: 0 });
+    const projection = projectVehicleOntoRoute(route, { lat: 0.004, lng: 0 }, 0);
+    const feature = buildNavigationRouteGeojson(route, projection);
     expect(feature.geometry.coordinates.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('sem posição atual, devolve a rota inteira', () => {
+  it('ancorada no progresso, a projeção não "volta" para um trecho anterior fisicamente próximo', () => {
+    // Rota que sobe e depois desce rente à subida (ruas paralelas num grid).
+    const crossing: Route = {
+      geometry: [
+        { lat: 0, lng: 0 }, // v0
+        { lat: 0.001, lng: 0 }, // v1  seg 0 (subida)
+        { lat: 0.002, lng: 0 }, // v2  seg 1 (subida)
+        { lat: 0.002, lng: 0.0002 }, // v3  seg 2 (leste)
+        { lat: 0.0004, lng: 0.0002 }, // v4  seg 3 (descida, rente à subida)
+      ],
+      steps: [],
+      distanceMeters: 500,
+      durationSeconds: 60,
+    };
+    // Veículo já na descida (perto de v4), mas fisicamente colado à subida
+    // (lng ~0). Ancorado no progresso 3, a janela começa no segmento 0 (=3-3),
+    // mas a projeção fica no segmento 3 (o mais próximo do ponto) — e não
+    // "volta" para o segmento 0/1 quando o progresso avança.
+    const projection = projectVehicleOntoRoute(crossing, { lat: 0.0006, lng: 0.00018 }, 3);
+    expect(projection.segmentIndex).toBe(3);
+    const feature = buildNavigationRouteGeojson(crossing, projection);
+    expect(feature.geometry.coordinates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('sem projeção, devolve a rota inteira', () => {
     const feature = buildNavigationRouteGeojson(route, null);
     expect(feature.geometry.coordinates).toHaveLength(route.geometry.length);
+  });
+});
+
+describe('buildManeuverArrowGeojson', () => {
+  const turningRoute: Route = {
+    // Segue para o norte até (0.002, 0), vira à direita (leste) até (0.002, 0.002).
+    geometry: [
+      { lat: 0, lng: 0 },
+      { lat: 0.001, lng: 0 },
+      { lat: 0.002, lng: 0 },
+      { lat: 0.002, lng: 0.001 },
+      { lat: 0.002, lng: 0.002 },
+    ],
+    steps: [
+      {
+        instruction: 'Siga para o norte',
+        distanceMeters: 222,
+        durationSeconds: 30,
+        maneuverLocation: { lat: 0, lng: 0 },
+        maneuverType: 'depart',
+        maneuverModifier: null,
+      },
+      {
+        instruction: 'Vire à direita',
+        distanceMeters: 222,
+        durationSeconds: 30,
+        maneuverLocation: { lat: 0.002, lng: 0 },
+        maneuverType: 'turn',
+        maneuverModifier: 'right',
+      },
+    ],
+    distanceMeters: 444,
+    durationSeconds: 60,
+  };
+
+  it('não desenha nada quando não há manobra à frente (último passo)', () => {
+    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0, lng: 0 }, true, 1);
+    expect(fc.features).toHaveLength(0);
+  });
+
+  it('não desenha nada quando a manobra ainda está longe', () => {
+    // ~440 m antes da esquina — bem além do limite de visibilidade.
+    const fc = buildManeuverArrowGeojson(turningRoute, { lat: -0.002, lng: 0 }, true, 0);
+    expect(fc.features).toHaveLength(0);
+  });
+
+  it('traça a curva (LineString que dobra na esquina) ao se aproximar da manobra', () => {
+    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0.0018, lng: 0 }, true, 0);
+    expect(fc.features).toHaveLength(1);
+    const coords = fc.features[0].geometry.coordinates;
+    // Cobre antes e depois da esquina: começa em lng ~0 (trecho norte) e
+    // termina em lng > 0 (trecho leste, pós-curva).
+    expect(coords[0][0]).toBeCloseTo(0, 4);
+    expect(coords[coords.length - 1][0]).toBeGreaterThan(0);
+  });
+
+  it('nada fora da navegação', () => {
+    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0.0018, lng: 0 }, false, 0);
+    expect(fc.features).toHaveLength(0);
   });
 });
 

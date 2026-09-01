@@ -4,17 +4,15 @@ import mapboxgl from 'mapbox-gl';
 import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../../types';
 import { getPuckIconMarkup } from '../../utils/vehicleAvatar';
 import { formatSpeedKmh } from '../../utils/format';
-import {
-  haversineDistanceMeters,
-  projectOntoRoute,
-  signedBearingDelta,
-} from '../../utils/distance';
+import { haversineDistanceMeters, signedBearingDelta, type RouteProjection } from '../../utils/distance';
 import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
   buildManeuverArrowGeojson,
+  projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
+import { NAV_PUCK_VERTICAL_OFFSET_RATIO } from './navConstants';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -29,12 +27,6 @@ const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 // Zoom/pitch da câmera de condução — visão "no capô", bem de perto.
 const NAV_ZOOM = 19;
 const NAV_PITCH = 60;
-// Desloca a câmera para o puck ficar bem na parte de baixo da tela (sobra o
-// máximo de trajeto visível à frente), em fração da altura do container.
-const NAV_PUCK_VERTICAL_OFFSET_RATIO = 0.36;
-// O ícone do veículo é desenhado a 46px; durante a navegação ele é ampliado
-// por esta escala para ficar em destaque na linha, como no Waze/Maps.
-const PUCK_ICON_NAV_SCALE = 1.5;
 // Deslocamento mínimo entre dois fixes para deles derivar uma direção de
 // deslocamento confiável (abaixo disso é ruído de GPS parado).
 const TRAVEL_BEARING_MIN_METERS = 4;
@@ -50,14 +42,6 @@ const CAMERA_BEARING_SMOOTHING = 0.4;
 // voltar a seguir sozinha (igual Waze).
 const RESUME_FOLLOW_DELAY_MS = 4000;
 
-// Escolhe a linha da rota conforme o modo: navegação mostra só o que está à
-// frente (começando no puck); planejamento mostra o trajeto inteiro.
-function routeGeojsonFor(route: Route, position: Coordinates | null, isNavigating: boolean) {
-  return isNavigating
-    ? buildNavigationRouteGeojson(route, position)
-    : buildRouteGeojson(route, position);
-}
-
 interface UseMapboxMapOptions {
   containerRef: RefObject<HTMLDivElement>;
   origin: Coordinates | null;
@@ -65,6 +49,7 @@ interface UseMapboxMapOptions {
   route: Route | null;
   isNavigating: boolean;
   currentStepIndex?: number;
+  routeProgressIndex?: number;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -150,6 +135,7 @@ export function useMapboxMap({
   route,
   isNavigating,
   currentStepIndex = 0,
+  routeProgressIndex = 0,
   headingDegrees,
   theme,
   travelProfile,
@@ -158,6 +144,7 @@ export function useMapboxMap({
 }: UseMapboxMapOptions) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const originMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const puckElementRef = useRef<HTMLDivElement | null>(null);
   const puckIconContainerRef = useRef<HTMLDivElement | null>(null);
   const speedBadgeRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -184,6 +171,10 @@ export function useMapboxMap({
   // atualizações a cada tick são responsabilidade do efeito dedicado abaixo.
   const currentStepIndexRef = useRef(currentStepIndex);
   currentStepIndexRef.current = currentStepIndex;
+  // Progresso ao longo da rota vindo do estado (sobrevive a um remount do mapa,
+  // ao contrário do ref local abaixo) — âncora da janela de projeção.
+  const routeProgressIndexRef = useRef(routeProgressIndex);
+  routeProgressIndexRef.current = routeProgressIndex;
   const skipInitialStyleEffectRef = useRef(true);
   // Rastreia se o *estilo em si* (a folha de estilo carregada via
   // construtor/setStyle) já terminou de carregar — ao contrário de
@@ -214,8 +205,28 @@ export function useMapboxMap({
   const smoothedBearingRef = useRef<number | null>(null);
   // Último segmento da rota em que o veículo estava projetado (monotônico) —
   // limita a janela de busca da projeção a cada tick e evita que uma rota que
-  // passa perto de si mesma bagunce a direção da câmera.
+  // passa perto de si mesma bagunce a direção da câmera OU vire a linha num toco.
   const lastRouteSegmentRef = useRef(0);
+  // Última projeção do veículo sobre a rota (ponto "grudado na pista" + segmento
+  // + tangente). Calculada uma vez por tick pelo efeito de redesenho da linha e
+  // reaproveitada pela câmera de condução (que roda logo depois, no mesmo
+  // commit) — assim linha e câmera concordam no mesmo ponto.
+  const lastProjectionRef = useRef<RouteProjection | null>(null);
+
+  // Projeção do veículo sobre a rota, com janela restrita ao progresso real.
+  // Atualiza os refs de progresso e de última projeção (monotônico).
+  const projectVehicle = useCallback((position: Coordinates | null): RouteProjection | null => {
+    const currentRoute = routeRef.current;
+    if (!position || !currentRoute || currentRoute.geometry.length < 2) {
+      lastProjectionRef.current = null;
+      return null;
+    }
+    const anchor = Math.max(routeProgressIndexRef.current, lastRouteSegmentRef.current);
+    const projection = projectVehicleOntoRoute(currentRoute, position, anchor);
+    lastRouteSegmentRef.current = Math.max(lastRouteSegmentRef.current, projection.segmentIndex);
+    lastProjectionRef.current = projection;
+    return projection;
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -250,6 +261,9 @@ export function useMapboxMap({
       mapRef.current?.remove();
       mapRef.current = null;
       originMarkerRef.current = null;
+      puckElementRef.current = null;
+      puckIconContainerRef.current = null;
+      speedBadgeRef.current = null;
       destinationMarkerRef.current = null;
       setMapInstance(null);
     };
@@ -295,6 +309,7 @@ export function useMapboxMap({
 
     if (!originMarkerRef.current) {
       const { element, iconContainer, speedBadge } = createPuckElement(travelProfileRef.current);
+      puckElementRef.current = element;
       puckIconContainerRef.current = iconContainer;
       speedBadgeRef.current = speedBadge;
       originMarkerRef.current = new mapboxgl.Marker({
@@ -347,18 +362,17 @@ export function useMapboxMap({
     }
   }, [travelProfile]);
 
-  // Amplia o ícone do veículo durante a navegação (destaque na linha, como no
-  // Waze/Maps). Escala só o `iconContainer` — o selo de velocidade é irmão dele
-  // e continua no tamanho normal e legível. `transform-origin` central mantém a
-  // âncora do marcador no lugar.
+  // Durante a navegação o veículo é um ícone FIXO na tela, desenhado por
+  // MapView por cima do mapa (ver `NAV_PUCK_VERTICAL_OFFSET_RATIO`) — isso é o
+  // que faz o carro ficar parado na tela enquanto o mapa rola por baixo, sem os
+  // "coices" que dava quando o marcador (posição instantânea) corria à frente
+  // da câmera (animada). Aqui só escondemos o marcador do mapa nesse modo; no
+  // planejamento ele volta, mostrando a posição real sobre a prévia da rota.
   useEffect(() => {
-    const iconContainer = puckIconContainerRef.current;
-    if (!iconContainer) {
-      return;
+    if (puckElementRef.current) {
+      puckElementRef.current.style.visibility = isNavigating ? 'hidden' : 'visible';
     }
-    iconContainer.style.transformOrigin = 'center';
-    iconContainer.style.transform = isNavigating ? `scale(${PUCK_ICON_NAV_SCALE})` : 'scale(1)';
-  }, [isNavigating, origin, travelProfile]);
+  }, [isNavigating, origin]);
 
   // Mantém o selo "X km/h" do puck em dia com o que o GPS reporta — sempre
   // visível, com "0 km/h" antes de qualquer velocidade real ser reportada,
@@ -456,7 +470,9 @@ export function useMapboxMap({
       return;
     }
 
-    const geojson = routeGeojsonFor(route, originRef.current, isNavigating);
+    const geojson = isNavigating
+      ? buildNavigationRouteGeojson(route, projectVehicle(originRef.current))
+      : buildRouteGeojson(route, originRef.current);
     const maneuverArrowGeojson = buildManeuverArrowGeojson(
       route,
       originRef.current,
@@ -506,20 +522,23 @@ export function useMapboxMap({
           type: 'geojson',
           data: maneuverArrowGeojson,
         });
-        // Seta branca (chevron) sobre a linha, no ponto da próxima manobra,
-        // girada para a direção em que a rota segue ali — o "traço" que o
-        // Waze/Maps mostram no centro da curva. `▲` já aponta para o norte, e
-        // `text-rotate` gira no sentido horário a partir daí, casando com o
-        // azimute (0 = norte) guardado na feature.
+        // Seta que TRAÇA a curva: a source é uma LineString curta seguindo a
+        // rua antes/depois da manobra (ver `buildManeuverArrowGeojson`), e aqui
+        // `symbol-placement: 'line'` repete um "▶" ao longo dela. Com
+        // `text-keep-upright: false` cada "▶" gira para acompanhar a direção da
+        // via, então as pontas dobram na esquina e mostram para onde virar —
+        // o "L" do Waze/Maps, não uma flecha reta apontando para frente.
         map.addLayer({
           id: MANEUVER_ARROW_LAYER_ID,
           type: 'symbol',
           source: MANEUVER_ARROW_SOURCE_ID,
           layout: {
-            'text-field': '▲',
+            'text-field': '▶',
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-            'text-size': 26,
-            'text-rotate': ['get', 'bearing'],
+            'text-size': 22,
+            'symbol-placement': 'line',
+            'symbol-spacing': 34,
+            'text-keep-upright': false,
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'map',
             'text-allow-overlap': true,
@@ -575,7 +594,7 @@ export function useMapboxMap({
     // para reenquadrar a rota com o padding correto — sem isso, o primeiro
     // fitBounds usaria a altura antiga (0) e a rota nasceria atrás do
     // cartão mesmo assim.
-  }, [route, theme, isNavigating, chromeInsets]);
+  }, [route, theme, isNavigating, chromeInsets, projectVehicle]);
 
   // Redesenha a linha da rota e a seta de manobra conforme o GPS atualiza, sem
   // repetir fitBounds/criação de camadas (que já rodaram no efeito acima) — só
@@ -586,9 +605,17 @@ export function useMapboxMap({
     if (!map || !route) {
       return;
     }
+    // Calculada aqui (uma vez por tick, sempre que navegando) para a câmera de
+    // condução, que roda logo depois no mesmo commit, reaproveitar via
+    // `lastProjectionRef` — assim linha e câmera concordam no mesmo ponto.
+    const projection = isNavigating ? projectVehicle(origin) : null;
     const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (source) {
-      source.setData(routeGeojsonFor(route, origin, isNavigating));
+      source.setData(
+        isNavigating
+          ? buildNavigationRouteGeojson(route, projection)
+          : buildRouteGeojson(route, origin),
+      );
     }
     const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
       | mapboxgl.GeoJSONSource
@@ -598,11 +625,15 @@ export function useMapboxMap({
         buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex),
       );
     }
-  }, [route, origin, isNavigating, currentStepIndex]);
+  }, [route, origin, isNavigating, currentStepIndex, projectVehicle]);
 
-  // Aplica a câmera de condução (visão "no capô") centrada em `position`:
-  // zoom de perto, inclinada, girada para a direção de deslocamento e com o
-  // puck jogado para o terço de baixo da tela.
+  // Aplica a câmera de condução (visão "no capô"): centraliza no ponto do
+  // veículo JÁ PROJETADO sobre a rota (o mesmo início da linha — ver
+  // `lastProjectionRef`), inclina, gira para a direção da rua à frente e joga
+  // esse ponto para a parte de baixo da tela, onde MapView desenha o veículo
+  // fixo. Como o alvo é o ponto projetado (que avança suave ao longo da linha,
+  // sem o tremor perpendicular do GPS) e o veículo é fixo na tela, o mapa rola
+  // por baixo sem o carro dar "coices".
   const driveCameraTo = useCallback(
     (map: mapboxgl.Map, position: Coordinates) => {
       const previous = lastCameraPositionRef.current;
@@ -611,25 +642,18 @@ export function useMapboxMap({
       }
       lastCameraPositionRef.current = position;
 
-      // Direção-alvo da câmera:
-      //  - navegando com rota: a TANGENTE da rota no ponto onde o veículo está
-      //    (a direção da própria rua à frente). É sempre definida, mesmo parado
-      //    ou andando devagar — é o que dá a visão "atrás do veículo, rua
-      //    acima" do Waze/Maps, em vez de a câmera apontar para um lado quando
-      //    o GPS não reporta heading. O heading do GPS só assume quando diverge
-      //    muito da rota (usuário saiu da pista de verdade).
-      //  - sem rota: heading do GPS, senão direção derivada de dois fixes.
-      let targetBearing: number;
+      // Projeção já calculada pelo efeito de redesenho da linha (roda antes
+      // deste, no mesmo commit); só recomputa se ainda não houver uma.
+      const projection = lastProjectionRef.current ?? projectVehicle(position);
       const routeGeometry = routeRef.current?.geometry;
-      if (isNavigating && routeGeometry && routeGeometry.length >= 2) {
-        const projection = projectOntoRoute(position, routeGeometry, {
-          fromIndex: lastRouteSegmentRef.current - 3,
-          toIndex: lastRouteSegmentRef.current + 60,
-        });
-        lastRouteSegmentRef.current = Math.max(
-          lastRouteSegmentRef.current,
-          projection.segmentIndex,
-        );
+      const center = isNavigating && projection ? projection.point : position;
+
+      // Direção-alvo: navegando, a TANGENTE da rota no ponto do veículo (sempre
+      // definida, mesmo parado — evita a câmera "de lado" quando o GPS não dá
+      // heading). O heading do GPS só assume quando diverge muito da rota
+      // (usuário fora da pista). Sem rota: heading, senão direção de dois fixes.
+      let targetBearing: number;
+      if (isNavigating && projection && routeGeometry && routeGeometry.length >= 2) {
         const routeBearing = bearingBetween(
           routeGeometry[projection.segmentIndex],
           routeGeometry[projection.segmentIndex + 1],
@@ -657,7 +681,7 @@ export function useMapboxMap({
       const offsetY = (containerRef.current?.clientHeight ?? 0) * NAV_PUCK_VERTICAL_OFFSET_RATIO;
 
       map.easeTo({
-        center: [position.lng, position.lat],
+        center: [center.lng, center.lat],
         zoom: NAV_ZOOM,
         pitch: NAV_PITCH,
         bearing: smoothedBearing,
@@ -665,7 +689,7 @@ export function useMapboxMap({
         duration: 700,
       });
     },
-    [headingDegrees, containerRef, isNavigating],
+    [headingDegrees, containerRef, isNavigating, projectVehicle],
   );
 
   useEffect(() => {
@@ -684,13 +708,15 @@ export function useMapboxMap({
       lastTravelBearingRef.current = null;
       smoothedBearingRef.current = null;
       lastRouteSegmentRef.current = 0;
+      lastProjectionRef.current = null;
       map.easeTo({ pitch: 0, bearing: 0, offset: [0, 0], duration: 500 });
     }
   }, [origin, isNavigating, headingDegrees, isFollowingUser, driveCameraTo]);
 
-  // Uma rota nova (plano/recálculo) recomeça o progresso da câmera do zero.
+  // Uma rota nova (plano/recálculo) recomeça o progresso do zero.
   useEffect(() => {
     lastRouteSegmentRef.current = 0;
+    lastProjectionRef.current = null;
   }, [route]);
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um

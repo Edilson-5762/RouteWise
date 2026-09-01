@@ -2,6 +2,9 @@ import { useRef } from 'react';
 import { LocateFixed } from 'lucide-react';
 import { useMapboxMap } from '../features/map/useMapboxMap';
 import { useNearbyPlacesMarkers } from '../features/places/useNearbyPlacesMarkers';
+import { NAV_PUCK_VERTICAL_OFFSET_RATIO, NAV_VEHICLE_ICON_PX } from '../features/map/navConstants';
+import { getPuckIconMarkup } from '../utils/vehicleAvatar';
+import { formatSpeedKmh } from '../utils/format';
 import type {
   Coordinates,
   GeocodingSuggestion,
@@ -16,6 +19,7 @@ interface MapViewProps {
   route: Route | null;
   isNavigating: boolean;
   currentStepIndex?: number;
+  routeProgressIndex?: number;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -30,6 +34,7 @@ export function MapView({
   route,
   isNavigating,
   currentStepIndex,
+  routeProgressIndex,
   headingDegrees,
   theme,
   travelProfile,
@@ -45,6 +50,7 @@ export function MapView({
     route,
     isNavigating,
     currentStepIndex,
+    routeProgressIndex,
     headingDegrees,
     theme,
     travelProfile,
@@ -60,9 +66,47 @@ export function MapView({
     onSelect: onDestinationSelected,
   });
 
+  // O avatar é desenhado a 46px fixos; tira o tamanho embutido para ele
+  // preencher o container maior do ícone fixo da navegação (ver abaixo).
+  const navVehicleMarkup = getPuckIconMarkup(travelProfile).replace(
+    /\swidth="\d+"\s+height="\d+"/,
+    ' width="100%" height="100%"',
+  );
+
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} data-testid="map-view" className="h-full w-full" />
+
+      {/* Veículo da navegação: um ícone FIXO na tela, na mesma posição vertical
+          em que a câmera centraliza o ponto do veículo projetado sobre a rota
+          (NAV_PUCK_VERTICAL_OFFSET_RATIO). Como não é um marcador do mapa, ele
+          não se move na tela — o mapa é que rola por baixo, sem os "coices"
+          para frente. Aponta sempre para cima porque a câmera já gira o mapa
+          para a direção da rua à frente (visão "atrás do veículo" do Waze). */}
+      {isNavigating && (
+        <div
+          data-testid="nav-vehicle"
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 z-[5] flex flex-col items-center"
+          style={{
+            top: `${(0.5 + NAV_PUCK_VERTICAL_OFFSET_RATIO) * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.55))',
+          }}
+        >
+          <div
+            className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold leading-none text-white shadow"
+            style={{ marginBottom: -6, zIndex: 1 }}
+          >
+            {formatSpeedKmh(speedMetersPerSecond)}
+          </div>
+          <div
+            style={{ width: NAV_VEHICLE_ICON_PX, height: NAV_VEHICLE_ICON_PX }}
+            dangerouslySetInnerHTML={{ __html: navVehicleMarkup }}
+          />
+        </div>
+      )}
+
       {!isFollowingUser && (
         <button
           type="button"
