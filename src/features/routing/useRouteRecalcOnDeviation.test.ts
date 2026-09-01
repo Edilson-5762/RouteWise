@@ -65,14 +65,15 @@ describe('useRouteRecalcOnDeviation', () => {
     await tick(0);
     expect(recalculate).toHaveBeenCalledTimes(1);
 
-    // Após a 1ª falha o próximo intervalo é 5s; depois cresce (10s, 15s, ...).
-    await tick(5000);
+    // Após a 1ª falha vem o 1º intervalo (RETRY_BASE_MS); depois ele cresce a
+    // cada falha (2x, 3x, ...). Cada `tick` avança exatamente o intervalo da vez.
+    await tick(3000);
     expect(recalculate).toHaveBeenCalledTimes(2);
 
-    await tick(10000);
+    await tick(6000);
     expect(recalculate).toHaveBeenCalledTimes(3);
 
-    await tick(15000);
+    await tick(9000);
     expect(recalculate).toHaveBeenCalledTimes(4);
   });
 

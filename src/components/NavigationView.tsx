@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
@@ -114,12 +115,13 @@ export function NavigationView({
         />
       </div>
       {isRecalculating && (
-        <p
+        <div
           role="status"
-          className="pointer-events-auto absolute left-1/2 top-20 z-10 -translate-x-1/2 rounded-full bg-surface px-4 py-2 text-sm font-medium text-surface-foreground shadow-lg"
+          className="pointer-events-auto absolute left-1/2 top-24 z-20 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-2xl bg-amber-500 px-5 py-3 text-base font-bold text-white shadow-2xl ring-2 ring-amber-300"
         >
-          Recalculando rota...
-        </p>
+          <RefreshCw size={22} className="animate-spin" aria-hidden="true" />
+          Recalculando a rota…
+        </div>
       )}
       {!isRecalculating && routeError && (
         <div className="pointer-events-auto absolute left-1/2 top-20 z-10 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">

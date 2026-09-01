@@ -26,8 +26,14 @@ const DEVIATION_THRESHOLD_METERS = 40;
 // estado de ficar oscilando quando a posição do GPS treme perto da linha.
 const BACK_ON_ROUTE_THRESHOLD_METERS = 20;
 // Quantos segmentos à frente/atrás do progresso atual a projeção considera.
-const PROJECTION_WINDOW_BACK_SEGMENTS = 3;
-const PROJECTION_WINDOW_AHEAD_SEGMENTS = 80;
+// O "atrás" recua bastante (não só 3) para a projeção conseguir se recuperar
+// quando um fix ruim de GPS empurra o progresso à frente — senão a manobra/voz
+// ficavam "atrasadas" (achando que faltava mais do que faltava).
+const PROJECTION_WINDOW_BACK_SEGMENTS = 15;
+const PROJECTION_WINDOW_AHEAD_SEGMENTS = 60;
+// Quantos segmentos por tick o progresso pode RECUAR (auto-recuperação de um
+// fix ruim); nunca abaixo do segmento realmente projetado.
+const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
 
 export type NavigationAction =
   | { type: 'SET_ORIGIN'; origin: Coordinates }
@@ -119,7 +125,13 @@ export function navigationReducer(
         fromIndex: state.routeProgressIndex - PROJECTION_WINDOW_BACK_SEGMENTS,
         toIndex: state.routeProgressIndex + PROJECTION_WINDOW_AHEAD_SEGMENTS,
       });
-      const routeProgressIndex = Math.max(state.routeProgressIndex, projection.segmentIndex);
+      // Segue o segmento projetado, mas só deixa RECUAR
+      // PROGRESS_MAX_RECEDE_SEGMENTS por tick — auto-recuperação de um fix ruim
+      // sem "voltar" de uma vez para um trecho anterior fisicamente próximo.
+      const routeProgressIndex = Math.max(
+        projection.segmentIndex,
+        state.routeProgressIndex - PROGRESS_MAX_RECEDE_SEGMENTS,
+      );
 
       const totalGeometryMeters = polylineLengthMeters(geometry);
       const progressFraction =

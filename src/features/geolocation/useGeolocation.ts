@@ -36,8 +36,10 @@ const MOVING_SPEED_THRESHOLD_MPS = 0.7;
 
 // De quanto em quanto tempo o app re-pede a posição por conta própria. Em
 // alguns aparelhos o `watchPosition` do Chrome entrega uma leitura e para de
-// disparar; esse polling ativo mantém as leituras chegando.
-const POLL_INTERVAL_MS = 2500;
+// disparar; esse polling ativo mantém as leituras chegando. Mais curto (1,2s)
+// deixa a manobra/voz e a detecção de desvio reagirem mais rápido durante a
+// navegação — o custo de bateria a mais é aceitável só enquanto se dirige.
+const POLL_INTERVAL_MS = 1200;
 const POLL_TIMEOUT_MS = 12000;
 // Quantas falhas seguidas do polling (sem nenhuma posição ainda) até mostrar
 // o erro na tela. Antes disso o app espera — um fix de GPS "frio" leva de 30s

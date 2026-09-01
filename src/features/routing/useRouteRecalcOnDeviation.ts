@@ -6,8 +6,8 @@ import type { Coordinates, TravelProfile } from '../../types';
 // limpa `deviated` nos dois casos). A cada falha de rede/API o intervalo cresce
 // um pouco; após 6 falhas seguidas o hook desiste e expõe `hasGivenUp` para a
 // UI mostrar um erro com botão de "tentar de novo" (`retry`).
-const RETRY_BASE_MS = 5000;
-const RETRY_MAX_MS = 30000;
+const RETRY_BASE_MS = 3000;
+const RETRY_MAX_MS = 20000;
 const MAX_CONSECUTIVE_FAILURES = 6;
 
 interface Params {

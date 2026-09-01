@@ -41,23 +41,31 @@ describe('buildRouteGeojson (planejamento)', () => {
 });
 
 describe('buildNavigationRouteGeojson (navegação)', () => {
-  it('começa a linha no ponto PROJETADO sobre a rota (colado na pista), não na posição crua do GPS', () => {
-    // GPS ~1 m a leste da rota (que é reta em lng 0): a linha tem que começar
-    // em lng 0 (na pista), na mesma latitude — nunca no lng 0.00001 do GPS.
+  it('fica toda colada na pista (lng ~0) e passa pelo ponto projetado, não pela posição crua do GPS', () => {
+    // GPS ~1 m a leste da rota (que é reta em lng 0).
     const projection = projectVehicleOntoRoute(route, { lat: 0.00205, lng: 0.00001 }, 0);
     const feature = buildNavigationRouteGeojson(route, projection);
-    const [lng, lat] = feature.geometry.coordinates[0];
-    expect(lng).toBeCloseTo(0, 6);
-    expect(lat).toBeCloseTo(0.00205, 4);
+    // Nenhum ponto da linha sai da pista (o lng 0.00001 do GPS nunca entra).
+    for (const [lng] of feature.geometry.coordinates) {
+      expect(lng).toBeCloseTo(0, 6);
+    }
+    // O ponto projetado (na latitude do veículo) está na linha.
+    const hasProjected = feature.geometry.coordinates.some(([, lat]) =>
+      Math.abs(lat - 0.00205) < 0.0001,
+    );
+    expect(hasProjected).toBe(true);
   });
 
-  it('descarta o trecho já percorrido (do ponto projetado até o fim)', () => {
+  it('desenha um pouco do trecho JÁ PERCORRIDO atrás do veículo, e vai até o fim da rota', () => {
+    // Veículo perto do meio da rota (lat ~0.002).
     const projection = projectVehicleOntoRoute(route, { lat: 0.002, lng: 0 }, 0);
     const feature = buildNavigationRouteGeojson(route, projection);
-    expect(feature.geometry.coordinates).toHaveLength(3);
-    expect(feature.geometry.coordinates[feature.geometry.coordinates.length - 1]).toEqual([
-      0, 0.004,
-    ]);
+    const coords = feature.geometry.coordinates;
+    // Vai até o destino.
+    expect(coords[coords.length - 1]).toEqual([0, 0.004]);
+    // E começa ANTES da posição do veículo (há ponto com lat < 0.002 — o
+    // "backtrack" que faz a linha alcançar o ícone do veículo).
+    expect(coords[0][1]).toBeLessThan(0.002);
   });
 
   it('mantém pelo menos 2 pontos mesmo colado no destino', () => {
@@ -133,20 +141,24 @@ describe('buildManeuverArrowGeojson', () => {
     expect(fc.features).toHaveLength(0);
   });
 
-  it('não desenha nada quando a manobra ainda está longe', () => {
-    // ~440 m antes da esquina — bem além do limite de visibilidade.
-    const fc = buildManeuverArrowGeojson(turningRoute, { lat: -0.002, lng: 0 }, true, 0);
+  it('não desenha nada enquanto a manobra não está BEM perto (some longe da curva)', () => {
+    // ~220 m antes da esquina — além do limite curto de visibilidade.
+    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0, lng: 0 }, true, 0);
     expect(fc.features).toHaveLength(0);
   });
 
-  it('traça a curva (LineString que dobra na esquina) ao se aproximar da manobra', () => {
+  it('desenha UMA seta (Point) em cima da curva ao chegar bem perto, com glifo do lado e azimute de chegada', () => {
+    // ~22 m antes da esquina (lat 0.0018 → manobra em lat 0.002).
     const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0.0018, lng: 0 }, true, 0);
     expect(fc.features).toHaveLength(1);
-    const coords = fc.features[0].geometry.coordinates;
-    // Cobre antes e depois da esquina: começa em lng ~0 (trecho norte) e
-    // termina em lng > 0 (trecho leste, pós-curva).
-    expect(coords[0][0]).toBeCloseTo(0, 4);
-    expect(coords[coords.length - 1][0]).toBeGreaterThan(0);
+    const feature = fc.features[0];
+    expect(feature.geometry.type).toBe('Point');
+    // No ponto exato da manobra.
+    expect(feature.geometry.coordinates).toEqual([0, 0.002]);
+    // Curva à direita → glifo "↱".
+    expect(feature.properties?.glyph).toBe('↱');
+    // Chegada vinda do sul (rumo norte) → azimute ~0°.
+    expect(feature.properties?.bearing).toBeCloseTo(0, 0);
   });
 
   it('nada fora da navegação', () => {

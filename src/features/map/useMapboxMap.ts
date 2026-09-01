@@ -38,6 +38,13 @@ const OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
 // só esta fração do caminho até a direção-alvo, então uma curva vira um giro
 // gradual em vez de um "tranco". Menor = mais suave (e mais lento pra reagir).
 const CAMERA_BEARING_SMOOTHING = 0.4;
+// Duração da animação da câmera a cada tick. Curta o bastante para o mapa
+// "alcançar" o ponto do veículo antes do próximo fix (senão a linha parece
+// ficar adiantada), longa o bastante para não dar tranco.
+const CAMERA_EASE_DURATION_MS = 450;
+// Quantos segmentos por tick o progresso pode RECUAR para se recuperar de um
+// fix ruim de GPS (ver `lastRouteSegmentRef`).
+const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
 // Depois de um gesto do usuário durante a navegação, quanto tempo até a câmera
 // voltar a seguir sozinha (igual Waze).
 const RESUME_FOLLOW_DELAY_MS = 4000;
@@ -203,9 +210,11 @@ export function useMapboxMap({
   // Direção da câmera após a suavização (ver CAMERA_BEARING_SMOOTHING) — é ela
   // que a câmera realmente usa, aproximando-se da direção-alvo aos poucos.
   const smoothedBearingRef = useRef<number | null>(null);
-  // Último segmento da rota em que o veículo estava projetado (monotônico) —
-  // limita a janela de busca da projeção a cada tick e evita que uma rota que
-  // passa perto de si mesma bagunce a direção da câmera OU vire a linha num toco.
+  // Segmento da rota em que o veículo estava projetado no último tick — âncora
+  // da janela de projeção. NÃO é estritamente monotônico: pode recuar até
+  // PROGRESS_MAX_RECEDE_SEGMENTS por tick, para a projeção se recuperar de um
+  // fix ruim de GPS que tenha empurrado o progresso à frente (senão a linha
+  // ficava permanentemente adiantada em relação ao veículo).
   const lastRouteSegmentRef = useRef(0);
   // Última projeção do veículo sobre a rota (ponto "grudado na pista" + segmento
   // + tangente). Calculada uma vez por tick pelo efeito de redesenho da linha e
@@ -223,7 +232,13 @@ export function useMapboxMap({
     }
     const anchor = Math.max(routeProgressIndexRef.current, lastRouteSegmentRef.current);
     const projection = projectVehicleOntoRoute(currentRoute, position, anchor);
-    lastRouteSegmentRef.current = Math.max(lastRouteSegmentRef.current, projection.segmentIndex);
+    // Segue o segmento projetado, mas só deixa RECUAR até
+    // PROGRESS_MAX_RECEDE_SEGMENTS por tick — assim se recupera de um fix ruim
+    // sem "voltar" de uma vez para um trecho anterior fisicamente próximo.
+    lastRouteSegmentRef.current = Math.max(
+      projection.segmentIndex,
+      lastRouteSegmentRef.current - PROGRESS_MAX_RECEDE_SEGMENTS,
+    );
     lastProjectionRef.current = projection;
     return projection;
   }, []);
@@ -493,10 +508,12 @@ export function useMapboxMap({
           id: ROUTE_CASING_LAYER_ID,
           type: 'line',
           source: ROUTE_SOURCE_ID,
+          // `line-join: round` + linha mais grossa no zoom de navegação = canto
+          // arredondado (não "esquadro") nas curvas.
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#ffffff',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 6, 18, 18],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 8, 18, 22, 22, 30],
             'line-opacity': 0.95,
           },
         });
@@ -507,7 +524,7 @@ export function useMapboxMap({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#2563eb',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 12],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 18, 15, 22, 21],
           },
         });
       }
@@ -522,23 +539,20 @@ export function useMapboxMap({
           type: 'geojson',
           data: maneuverArrowGeojson,
         });
-        // Seta que TRAÇA a curva: a source é uma LineString curta seguindo a
-        // rua antes/depois da manobra (ver `buildManeuverArrowGeojson`), e aqui
-        // `symbol-placement: 'line'` repete um "▶" ao longo dela. Com
-        // `text-keep-upright: false` cada "▶" gira para acompanhar a direção da
-        // via, então as pontas dobram na esquina e mostram para onde virar —
-        // o "L" do Waze/Maps, não uma flecha reta apontando para frente.
+        // UMA seta de curva ("↰"/"↱"/"↑"), num único ponto EM CIMA da manobra,
+        // girada para a direção de chegada na curva — a ponta indica o lado.
+        // `buildManeuverArrowGeojson` só devolve a feature quando o veículo já
+        // está bem perto da manobra, então ela aparece "na hora da curva" e some
+        // logo depois.
         map.addLayer({
           id: MANEUVER_ARROW_LAYER_ID,
           type: 'symbol',
           source: MANEUVER_ARROW_SOURCE_ID,
           layout: {
-            'text-field': '▶',
+            'text-field': ['get', 'glyph'],
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-            'text-size': 22,
-            'symbol-placement': 'line',
-            'symbol-spacing': 34,
-            'text-keep-upright': false,
+            'text-size': 34,
+            'text-rotate': ['get', 'bearing'],
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'map',
             'text-allow-overlap': true,
@@ -686,7 +700,7 @@ export function useMapboxMap({
         pitch: NAV_PITCH,
         bearing: smoothedBearing,
         offset: [0, offsetY],
-        duration: 700,
+        duration: CAMERA_EASE_DURATION_MS,
       });
     },
     [headingDegrees, containerRef, isNavigating, projectVehicle],

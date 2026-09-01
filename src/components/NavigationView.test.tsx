@@ -85,7 +85,7 @@ describe('NavigationView', () => {
       />,
     );
 
-    expect(screen.getByText('Recalculando rota...')).toBeInTheDocument();
+    expect(screen.getByText('Recalculando a rota…')).toBeInTheDocument();
   });
 
   it('mostra o erro de recálculo quando routeError está presente e não está recalculando', () => {
@@ -104,7 +104,7 @@ describe('NavigationView', () => {
     );
 
     expect(screen.getByText('Erro ao recalcular a rota.')).toBeInTheDocument();
-    expect(screen.queryByText('Recalculando rota...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Recalculando a rota…')).not.toBeInTheDocument();
   });
 
   it('mostra uma tela de fallback com saída quando a rota/passo está ausente durante a navegação', () => {
