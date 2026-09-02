@@ -23,6 +23,27 @@ export interface PlaceSuggestion {
   coordinates?: Coordinates;
 }
 
+export interface ManeuverLane {
+  // `active`: esta faixa faz parte do caminho da manobra.
+  active: boolean;
+  // Direções que a faixa serve, ex.: ['left'], ['straight', 'right'].
+  directions: string[];
+}
+
+// Uma "instrução de banner" do Mapbox: o texto em duas linhas da manobra,
+// o ângulo da saída (em rotatória) e a guia de faixa. A API entrega várias
+// por passo, cada uma com sua distância de gatilho; guardamos todas.
+export interface BannerInstruction {
+  // Distância (m) antes da manobra a partir da qual este banner passa a valer.
+  triggerDistanceMeters: number;
+  primaryText: string;
+  secondaryText: string | null;
+  maneuverType: string;
+  maneuverModifier: string | null;
+  roundaboutDegrees: number | null;
+  lanes: ManeuverLane[];
+}
+
 export interface RouteStep {
   instruction: string;
   distanceMeters: number;
@@ -30,6 +51,12 @@ export interface RouteStep {
   maneuverLocation: Coordinates;
   maneuverType: string;
   maneuverModifier: string | null;
+  // Campos do turn-by-turn estilo Waze. Opcionais no tipo, mas SEMPRE
+  // populados por `getDirections` — opcionais só para não quebrar fixtures
+  // de teste antigas que constroem `RouteStep` à mão.
+  roadName?: string;
+  roundaboutExit?: number | null;
+  banners?: BannerInstruction[];
 }
 
 export interface Route {

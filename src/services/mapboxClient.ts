@@ -1,4 +1,11 @@
-import type { Coordinates, Route, RouteStep, TravelProfile } from '../types';
+import type {
+  BannerInstruction,
+  Coordinates,
+  ManeuverLane,
+  Route,
+  RouteStep,
+  TravelProfile,
+} from '../types';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 const DIRECTIONS_BASE_URL = 'https://api.mapbox.com/directions/v5/mapbox';
@@ -24,12 +31,36 @@ interface DirectionsManeuver {
   location: [number, number];
   type: string;
   modifier?: string;
+  exit?: number;
+}
+
+interface BannerComponentRaw {
+  type: string;
+  active?: boolean;
+  directions?: string[];
+}
+
+interface BannerTextRaw {
+  text: string;
+  type?: string;
+  modifier?: string;
+  degrees?: number;
+  components?: BannerComponentRaw[];
+}
+
+interface BannerInstructionRaw {
+  distanceAlongGeometry: number;
+  primary: BannerTextRaw;
+  secondary?: BannerTextRaw | null;
+  sub?: BannerTextRaw | null;
 }
 
 interface DirectionsStep {
   maneuver: DirectionsManeuver;
   distance: number;
   duration: number;
+  name?: string;
+  bannerInstructions?: BannerInstructionRaw[];
 }
 
 interface DirectionsLeg {
@@ -58,13 +89,32 @@ const MAPBOX_DIRECTIONS_PROFILE: Record<TravelProfile, string> = {
   cycling: 'cycling',
 };
 
+function toBannerInstruction(raw: BannerInstructionRaw, step: DirectionsStep): BannerInstruction {
+  const lanes: ManeuverLane[] = (raw.sub?.components ?? [])
+    .filter((component) => component.type === 'lane')
+    .map((component) => ({
+      active: component.active === true,
+      directions: component.directions ?? [],
+    }));
+
+  return {
+    triggerDistanceMeters: raw.distanceAlongGeometry,
+    primaryText: raw.primary.text,
+    secondaryText: raw.secondary?.text ?? null,
+    maneuverType: raw.primary.type ?? step.maneuver.type,
+    maneuverModifier: raw.primary.modifier ?? null,
+    roundaboutDegrees: typeof raw.primary.degrees === 'number' ? raw.primary.degrees : null,
+    lanes,
+  };
+}
+
 export async function getDirections(
   origin: Coordinates,
   destination: Coordinates,
   profile: TravelProfile,
 ): Promise<Route> {
   const coordinates = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
-  const url = `${DIRECTIONS_BASE_URL}/${MAPBOX_DIRECTIONS_PROFILE[profile]}/${coordinates}?geometries=geojson&steps=true&overview=full&language=pt&access_token=${MAPBOX_TOKEN}`;
+  const url = `${DIRECTIONS_BASE_URL}/${MAPBOX_DIRECTIONS_PROFILE[profile]}/${coordinates}?geometries=geojson&steps=true&banner_instructions=true&overview=full&language=pt&access_token=${MAPBOX_TOKEN}`;
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -87,6 +137,11 @@ export async function getDirections(
       maneuverLocation: { lng: step.maneuver.location[0], lat: step.maneuver.location[1] },
       maneuverType: step.maneuver.type,
       maneuverModifier: step.maneuver.modifier ?? null,
+      roadName: step.name ?? '',
+      roundaboutExit: step.maneuver.exit ?? null,
+      banners: [...(step.bannerInstructions ?? [])]
+        .map((raw) => toBannerInstruction(raw, step))
+        .sort((a, b) => b.triggerDistanceMeters - a.triggerDistanceMeters),
     })),
   );
 
