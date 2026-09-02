@@ -5,6 +5,9 @@ export interface ManeuverIconProps {
   className?: string;
 }
 
+// Tipos de manobra que recebem o desenho da rotatória em vez de um glifo de seta.
+export const ROUNDABOUT_MANEUVER_TYPES = new Set(['roundabout', 'rotary', 'roundabout turn']);
+
 // Rotação horária, em graus, por modificador (0 = seguir reto).
 const MODIFIER_DEGREES: Record<string, number> = {
   straight: 0,
@@ -31,11 +34,7 @@ function resolve(
   if (maneuverType === 'arrive') {
     return { kind: 'arrive', degrees: 0 };
   }
-  if (
-    maneuverType === 'roundabout' ||
-    maneuverType === 'rotary' ||
-    maneuverType === 'roundabout turn'
-  ) {
+  if (ROUNDABOUT_MANEUVER_TYPES.has(maneuverType)) {
     return { kind: 'roundabout-generic', degrees: 0 };
   }
   if (maneuverModifier === 'uturn' || maneuverType === 'uturn') {
@@ -53,6 +52,7 @@ function resolve(
   return { kind: 'arrow', degrees: degreesFor(maneuverModifier) };
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- o módulo também exporta ROUNDABOUT_MANEUVER_TYPES de propósito
 export function getManeuverIcon(
   maneuverType: string,
   maneuverModifier: string | null,

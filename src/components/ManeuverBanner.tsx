@@ -1,6 +1,6 @@
 import { formatDistance } from '../utils/format';
 import type { GuidanceView } from '../features/navigation/selectGuidance';
-import { getManeuverIcon } from './maneuvers/getManeuverIcon';
+import { getManeuverIcon, ROUNDABOUT_MANEUVER_TYPES } from './maneuvers/getManeuverIcon';
 import { RoundaboutDiagram } from './maneuvers/RoundaboutDiagram';
 import { LaneGuidance } from './LaneGuidance';
 import { ThenPreview } from './ThenPreview';
@@ -9,14 +9,12 @@ interface ManeuverBannerProps {
   guidance: GuidanceView | null;
 }
 
-const ROUNDABOUT_TYPES = new Set(['roundabout', 'rotary', 'roundabout turn']);
-
 export function ManeuverBanner({ guidance }: ManeuverBannerProps) {
   if (!guidance) {
     return null;
   }
 
-  const isRoundabout = ROUNDABOUT_TYPES.has(guidance.maneuverType);
+  const isRoundabout = ROUNDABOUT_MANEUVER_TYPES.has(guidance.maneuverType);
   const Icon = getManeuverIcon(guidance.maneuverType, guidance.maneuverModifier);
 
   return (

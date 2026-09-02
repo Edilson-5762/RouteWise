@@ -259,12 +259,6 @@ describe('getDirections', () => {
                     duration: 300,
                     bannerInstructions: [
                       {
-                        distanceAlongGeometry: 1200,
-                        primary: { text: 'Qn 401/402 Conjunto L', type: 'roundabout', modifier: 'right', degrees: 135 },
-                        secondary: { text: '1ª Avenida Norte' },
-                        sub: null,
-                      },
-                      {
                         distanceAlongGeometry: 400,
                         primary: { text: 'Qn 401/402 Conjunto L', type: 'roundabout', modifier: 'right', degrees: 135 },
                         secondary: null,
@@ -275,6 +269,12 @@ describe('getDirections', () => {
                             { type: 'lane', active: true, directions: ['straight', 'right'] },
                           ],
                         },
+                      },
+                      {
+                        distanceAlongGeometry: 1200,
+                        primary: { text: 'Qn 401/402 Conjunto L', type: 'roundabout', modifier: 'right', degrees: 135 },
+                        secondary: { text: '1ª Avenida Norte' },
+                        sub: null,
                       },
                     ],
                   },

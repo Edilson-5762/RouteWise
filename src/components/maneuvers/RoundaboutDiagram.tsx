@@ -44,7 +44,7 @@ export function RoundaboutDiagram({
       />
 
       {degrees == null ? (
-        // Genérico: seta circular curta saindo pra cima.
+        // Genérico: seta reta curta apontando pra cima.
         <g data-testid="roundabout-generic">
           <path
             d={`M${CX} ${CY - 11} L${CX} 3 M${CX} 3 l-3 4 M${CX} 3 l3 4`}
@@ -95,7 +95,7 @@ export function RoundaboutDiagram({
             dominantBaseline="central"
             fontSize="9"
             fontWeight="700"
-            fill="var(--color-maneuver, #0c3b3f)"
+            fill="rgb(var(--color-maneuver))"
           >
             {exitNumber}
           </text>
