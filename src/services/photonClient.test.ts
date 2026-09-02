@@ -37,6 +37,8 @@ describe('searchPhoton', () => {
     expect(url).toContain('bbox=-48.35%2C-16.1%2C-47.3%2C-15.4');
     expect(url).toContain('lat=-15.8');
     expect(url).toContain('lon=-47.9');
+    // O Photon responde 400 a `lang=pt` (só default/de/en/fr) — não enviamos.
+    expect(url).not.toContain('lang=');
   });
 
   it('converte a FeatureCollection preservando a ordem do Photon', async () => {
@@ -64,6 +66,18 @@ describe('searchPhoton', () => {
     });
     const results = await searchPhoton('lugar', { lat: -15.8, lng: -47.9 });
     expect(results.map((r) => r.placeName)).toEqual(['Dentro']);
+  });
+
+  it('descarta feature dentro do BR mas fora do retângulo do DF', async () => {
+    mockFetchOnceJson({
+      features: [
+        // São Paulo: countrycode BR, porém fora do bbox do DF → cai fora.
+        feature([-46.63, -23.55], { name: 'Praça da Sé (SP)', countrycode: 'BR' }),
+        feature([-47.9, -15.8], { name: 'No DF', countrycode: 'BR' }),
+      ],
+    });
+    const results = await searchPhoton('lugar', { lat: -15.8, lng: -47.9 });
+    expect(results.map((r) => r.placeName)).toEqual(['No DF']);
   });
 
   it('descarta feature sem coordenada utilizável', async () => {

@@ -415,6 +415,7 @@ describe('useGeocodingSearch', () => {
     });
 
     it('mantém error nulo e a lista do passe rápido quando o segundo passe falha inteiro', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
         { id: 'geo-1', placeName: 'Um resultado', coordinates: { lat: -15.8, lng: -47.9 } },
       ]);
@@ -429,6 +430,8 @@ describe('useGeocodingSearch', () => {
 
       expect(result.current.error).toBeNull();
       expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1']);
+      // Silêncio na tela, mas rastro no console para diagnóstico em produção.
+      expect(warnSpy).toHaveBeenCalled();
     });
 
     it('respeita o descanso de 3 s entre dois segundos passes', async () => {
@@ -447,7 +450,33 @@ describe('useGeocodingSearch', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300);
       });
-      expect(osmSpy).toHaveBeenCalledTimes(1); // menos de 3 s depois → não repetiu
+      // Menos de 3 s depois: o 2º passe fica só ADIADO até o descanso expirar
+      // (não é mais pulado de vez) — ver o teste seguinte.
+      expect(osmSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('depois que o descanso de 3 s expira, a nova query recebe o segundo passe', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([]);
+
+      const { rerender } = renderHook(({ q }) => useGeocodingSearch(q), {
+        initialProps: { q: 'lugar um' },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(osmSpy).toHaveBeenCalledTimes(1);
+
+      rerender({ q: 'lugar dois' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(osmSpy).toHaveBeenCalledTimes(1); // ainda no descanso → adiado
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(osmSpy).toHaveBeenCalledTimes(2); // descanso expirou → disparou
     });
 
     it('repassa a proximidade (e um AbortSignal) para o segundo passe', async () => {

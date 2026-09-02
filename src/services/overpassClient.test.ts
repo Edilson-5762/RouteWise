@@ -31,11 +31,21 @@ describe('searchDeepOsm', () => {
     mockFetchOnceJson({ elements: [] });
     await searchDeepOsm('guará', { lat: -15.8, lng: -47.9 });
     const body = lastFetchBody();
-    expect(body).toContain('[out:json][timeout:25];');
+    expect(body).toContain('[out:json][timeout:8];');
     expect(body).toContain('"^(name|name:pt|alt_name|old_name|short_name|official_name|loc_name|brand)$"');
     expect(body).toContain('(-16.1,-48.35,-15.4,-47.3);');
     // "guará" normalizado ("guara") e expandido em classes por vogal
     expect(body).toContain('g[uúùû][aáàâãä]r[aáàâãä]');
+  });
+
+  it('escapa aspas do termo para a string ~"..." não fechar antes da hora', async () => {
+    mockFetchOnceJson({ elements: [] });
+    await searchDeepOsm('pa"x guara', { lat: -15.8, lng: -47.9 });
+    const body = lastFetchBody();
+    // A aspas do termo vira \" dentro de ~"...",i — a string segue delimitada
+    // e o retângulo do DF continua logo depois do fechamento.
+    expect(body).toContain('\\"');
+    expect(body).toContain('",i](-16.1,-48.35,-15.4,-47.3);');
   });
 
   it('converte elementos em PlaceSuggestion, ordenados por distância do centro informado', async () => {

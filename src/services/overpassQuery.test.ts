@@ -29,10 +29,15 @@ describe('toAccentInsensitivePattern', () => {
 describe('buildOverpassQuery', () => {
   it('monta a query com o retângulo do DF e os 8 campos de nome', () => {
     const ql = buildOverpassQuery('guara');
-    expect(ql).toContain('[out:json][timeout:25];');
+    expect(ql).toContain('[out:json][timeout:8];');
     expect(ql).toContain(
       'nwr[~"^(name|name:pt|alt_name|old_name|short_name|official_name|loc_name|brand)$"~"guara",i](-16.1,-48.35,-15.4,-47.3);',
     );
     expect(ql.trimEnd().endsWith('out center 30;')).toBe(true);
+  });
+
+  it('escapa `\\` e depois `"` para não quebrar a string da QL', () => {
+    // Entrada: a " b \ c  → escapa `\`→`\\`, depois `"`→`\"`  → a \" b \\ c
+    expect(buildOverpassQuery('a"b\\c')).toContain('a\\"b\\\\c');
   });
 });

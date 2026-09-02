@@ -42,9 +42,17 @@ export function toAccentInsensitivePattern(term: string): string {
 
 export function buildOverpassQuery(pattern: string): string {
   const { south, west, north, east } = DF_BOUNDING_BOX;
+  // `pattern` já é um regex válido (saída de toAccentInsensitivePattern). Aqui
+  // trata-se a SEGUNDA camada de escape: o padrão é interpolado dentro de uma
+  // string da QL delimitada por aspas (~"...",i). Sem escapar, um `"` no texto
+  // fecharia a string cedo (→ Overpass 400 → reforço mudo). Escapa `\`
+  // primeiro, depois `"`.
+  const qlEscaped = pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return (
-    '[out:json][timeout:25];' +
-    `nwr[~"${NAME_KEYS_REGEX}"~"${pattern}",i](${south},${west},${north},${east});` +
+    // timeout:8 alinha o teto declarado ao servidor com o abort de 6 s do
+    // cliente (+ margem) — melhor cidadania na infra pública compartilhada.
+    '[out:json][timeout:8];' +
+    `nwr[~"${NAME_KEYS_REGEX}"~"${qlEscaped}",i](${south},${west},${north},${east});` +
     'out center 30;'
   );
 }

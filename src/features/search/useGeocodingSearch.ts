@@ -78,8 +78,9 @@ function interleave(lists: PlaceSuggestion[][]): PlaceSuggestion[] {
 //     categoria. Igual ao de sempre; entregue via `onFastResults` assim
 //     que fica pronto.
 //  2) Segundo passe (só quando o passe rápido traz < DEEP_SEARCH_RESULT_FLOOR
-//     e a query tem tamanho suficiente e passou o descanso) — Overpass +
-//     Photon em paralelo; os achados são anexados ao fim, sem duplicar.
+//     e a query tem tamanho suficiente; se o descanso ainda não passou, o
+//     passe ESPERA o restante em vez de pular) — Overpass + Photon em
+//     paralelo; os achados são anexados ao fim, sem duplicar.
 // O segundo passe é `allSettled` e nunca relança: só o passe rápido
 // produz o erro de "todas as fontes falharam".
 async function search(
@@ -123,21 +124,60 @@ async function search(
   );
   onFastResults(fastList);
 
-  const shouldDeepen =
+  // Vale a pena o segundo passe? Depende só do que o passe rápido trouxe, do
+  // tamanho do texto e de não estar abortado — NÃO do descanso. O descanso
+  // vira espera, não desistência: o efeito só re-roda quando `query`/
+  // `proximity` mudam, então pular aqui deixaria a query em que o usuário
+  // realmente parou sem reforço para sempre.
+  const wantsDeepPass =
     fastList.length < DEEP_SEARCH_RESULT_FLOOR &&
     query.trim().length >= DEEP_SEARCH_MIN_QUERY_LENGTH &&
-    Date.now() - lastDeepSearchAtRef.current >= DEEP_SEARCH_COOLDOWN_MS &&
     !signal.aborted;
 
-  if (!shouldDeepen) {
+  if (!wantsDeepPass) {
     return fastList;
   }
 
+  // Descanso de 3 s entre consultas profundas (uso justo do Overpass
+  // público): se a última começou há pouco, ESPERA o tempo que falta antes
+  // de disparar, em vez de pular o passe. Um abort durante a espera encerra
+  // na hora e sai sem disparar nada.
+  const sinceLast = Date.now() - lastDeepSearchAtRef.current;
+  if (sinceLast < DEEP_SEARCH_COOLDOWN_MS) {
+    const waitMs = DEEP_SEARCH_COOLDOWN_MS - sinceLast;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, waitMs);
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+    if (signal.aborted) {
+      return fastList;
+    }
+  }
+
+  // Arma o descanso só agora, quando o passe vai mesmo disparar: um abort no
+  // passe rápido OU durante a espera acima não "gasta" o descanso.
   lastDeepSearchAtRef.current = Date.now();
   const deepOutcomes = await Promise.allSettled([
     searchDeepOsm(query, proximity, signal),
     searchPhoton(query, proximity, signal),
   ]);
+
+  // Falha do segundo passe é silenciosa na tela (spec: nunca vira `error`),
+  // mas deixamos um rastro no console para diagnosticar um reforço morto em
+  // produção. Roda mesmo com o signal abortado.
+  for (const outcome of deepOutcomes) {
+    if (outcome.status === 'rejected') {
+      console.warn('[busca de reforço] fonte falhou:', outcome.reason);
+    }
+  }
+
   if (signal.aborted) {
     return fastList;
   }

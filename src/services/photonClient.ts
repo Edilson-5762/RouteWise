@@ -1,6 +1,6 @@
 import type { Coordinates, PlaceSuggestion } from '../types';
 import { timeoutSignal } from '../utils/timeoutSignal';
-import { DF_BOUNDING_BOX, DF_CENTER } from '../data/dfBounds';
+import { DF_BOUNDING_BOX, DF_CENTER, isWithinDf } from '../data/dfBounds';
 
 const PHOTON_URL = 'https://photon.komoot.io/api';
 const MIN_TERM_LENGTH = 4;
@@ -62,9 +62,11 @@ export async function searchPhoton(
   if (signal?.aborted) return [];
 
   const center = proximity ?? DF_CENTER;
+  // Sem `lang`: o Photon só aceita default/de/en/fr e responde 400 a `lang=pt`
+  // (verificado no endpoint ao vivo) — o que zerava este segundo passe. Sem o
+  // parâmetro, ele devolve o nome padrão/localizado, o que é aceitável.
   const params = new URLSearchParams({
     q: term,
-    lang: 'pt',
     limit: String(REQUEST_LIMIT),
     lat: String(center.lat),
     lon: String(center.lng),
@@ -97,10 +99,14 @@ export async function searchPhoton(
     if (props.countrycode && props.countrycode !== 'BR') return;
     const name = props.name?.trim() || props.street?.trim();
     if (!name) return;
+    const coordinates = { lat: coords[1], lng: coords[0] };
+    // O `bbox` do Photon é só um viés que ele às vezes relaxa — um resultado
+    // pode cair fora do DF. Filtro rígido ao retângulo aqui.
+    if (!isWithinDf(coordinates)) return;
     suggestions.push({
       id: `photon:${props.osm_type ?? 'x'}:${props.osm_id ?? index}`,
       placeName: buildLabel(name, props),
-      coordinates: { lat: coords[1], lng: coords[0] },
+      coordinates,
     });
   });
   return suggestions.slice(0, MAX_SUGGESTIONS);
