@@ -263,7 +263,11 @@ const TIMEOUT_MS = 4000;
 
 - `q` = termo (`normalize` **não** é aplicado aqui — o Photon lida bem
   com acento e maiúscula; passa-se `query.trim()`);
-- `lang=pt` (o Photon pode ignorar e cair no nome padrão — aceitável);
+- **sem `lang`** — a instância pública do Photon só aceita `default`,
+  `de`, `en`, `fr` e responde **HTTP 400** para qualquer outro valor
+  (verificado contra o endpoint real na implementação; a suposição
+  original de que `pt` seria ignorado estava errada). Sem o parâmetro,
+  o Photon devolve o nome padrão/local — aceitável;
 - `limit=10`;
 - `lat` / `lon` = `proximity ?? DF_CENTER` (**viés** de ordenação, não
   filtro);
@@ -523,8 +527,12 @@ igual às da Geoapify/Mapbox.
 - Overpass e Photon são infraestrutura pública compartilhada, com
   política de uso justo. Se ficarem instáveis, o recurso degrada em
   silêncio — não há nada para regenerar nem chave para rotacionar.
-- Se o `lang=pt` do Photon se mostrar sempre ignorado (rótulos com
-  exônimo em inglês), revisitar só se alguém notar.
+- O Photon é consultado **sem** `lang` (ver acima — `pt` dá 400). Se um
+  dia a instância pública passar a aceitar `pt`, dá para reintroduzir o
+  parâmetro para rótulos mais consistentes.
+- Falha de uma fonte do segundo passe não aparece na tela, mas deixa um
+  `console.warn('[busca de reforço] fonte falhou:', ...)` — é o rastro
+  para diagnosticar um reforço mudo em produção.
 - Nova RA ou novo endereço no OSM aparece automaticamente na busca de
   reforço (é o OSM cru) — sem passo de regeneração, ao contrário do
   cadastro de unidades de saúde.
