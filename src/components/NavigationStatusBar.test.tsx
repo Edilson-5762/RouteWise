@@ -8,7 +8,6 @@ describe('NavigationStatusBar', () => {
       <NavigationStatusBar
         durationSeconds={780}
         distanceMeters={6300}
-        speedMetersPerSecond={12}
         isVoiceSupported
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
@@ -19,24 +18,6 @@ describe('NavigationStatusBar', () => {
 
     expect(screen.getByText('13 min')).toBeInTheDocument();
     expect(screen.getByText('6.3 km')).toBeInTheDocument();
-    expect(screen.getByText('43 km/h')).toBeInTheDocument();
-  });
-
-  it('não mostra velocidade quando indisponível', () => {
-    render(
-      <NavigationStatusBar
-        durationSeconds={780}
-        distanceMeters={6300}
-        speedMetersPerSecond={null}
-        isVoiceSupported
-        isVoiceMuted={false}
-        onToggleVoice={vi.fn()}
-        onExit={vi.fn()}
-        onExitApp={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByText(/km\/h/)).not.toBeInTheDocument();
   });
 
   it('chama onExit ao clicar em sair', () => {
@@ -45,7 +26,6 @@ describe('NavigationStatusBar', () => {
       <NavigationStatusBar
         durationSeconds={780}
         distanceMeters={6300}
-        speedMetersPerSecond={null}
         isVoiceSupported
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
@@ -65,7 +45,6 @@ describe('NavigationStatusBar', () => {
       <NavigationStatusBar
         durationSeconds={780}
         distanceMeters={6300}
-        speedMetersPerSecond={null}
         isVoiceSupported
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
@@ -84,7 +63,6 @@ describe('NavigationStatusBar', () => {
       <NavigationStatusBar
         durationSeconds={780}
         distanceMeters={6300}
-        speedMetersPerSecond={null}
         isVoiceSupported={false}
         isVoiceMuted={false}
         onToggleVoice={vi.fn()}
