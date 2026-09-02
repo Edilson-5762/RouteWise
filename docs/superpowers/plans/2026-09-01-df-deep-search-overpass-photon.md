@@ -25,9 +25,11 @@
 
 ---
 
+> Nota: as seções de tarefa abaixo usam o cabeçalho "Task N" (em vez de "Task N") para casar com o utilitário `task-brief` do fluxo de execução por subagentes. O conteúdo segue em pt-BR.
+
 ## Mapa de arquivos
 
-| Arquivo | Papel | Tarefa |
+| Arquivo | Papel | Task |
 |---|---|---|
 | `src/data/dfBounds.ts` (novo) | Retângulo do DF + ponto central + `isWithinDf` | 1 |
 | `src/data/dfBounds.test.ts` (novo) | Testes do acima | 1 |
@@ -46,7 +48,7 @@
 
 ---
 
-## Tarefa 1: `dfBounds.ts` — retângulo do DF e ponto central
+## Task 1: `dfBounds.ts` — retângulo do DF e ponto central
 
 **Files:**
 - Create: `src/data/dfBounds.ts`
@@ -153,7 +155,7 @@ git commit -m "feat(busca): retângulo do DF e ponto central para a busca de ref
 
 ---
 
-## Tarefa 2: `timeoutSignal.ts` — teto de tempo + abort externo
+## Task 2: `timeoutSignal.ts` — teto de tempo + abort externo
 
 **Files:**
 - Create: `src/utils/timeoutSignal.ts`
@@ -262,14 +264,14 @@ git commit -m "feat(busca): util timeoutSignal (teto de tempo + abort externo)"
 
 ---
 
-## Tarefa 3: `overpassQuery.ts` — padrão tolerante a acento e montagem da query
+## Task 3: `overpassQuery.ts` — padrão tolerante a acento e montagem da query
 
 **Files:**
 - Create: `src/services/overpassQuery.ts`
 - Test: `src/services/overpassQuery.test.ts`
 
 **Interfaces:**
-- Consumes: `DF_BOUNDING_BOX` de `src/data/dfBounds` (Tarefa 1). `normalize` de `src/utils/text` **não** é chamado aqui — `toAccentInsensitivePattern` assume que o termo já veio normalizado (minúsculas, sem acento, `trim`); quem normaliza é `searchDeepOsm` (Tarefa 4).
+- Consumes: `DF_BOUNDING_BOX` de `src/data/dfBounds` (Task 1). `normalize` de `src/utils/text` **não** é chamado aqui — `toAccentInsensitivePattern` assume que o termo já veio normalizado (minúsculas, sem acento, `trim`); quem normaliza é `searchDeepOsm` (Task 4).
 - Produces:
   - `toAccentInsensitivePattern(term: string): string` — termo normalizado → regex que casa as formas acentuadas de cada vogal; palavras ligadas por `\s+`; metacaracteres de regex escapados.
   - `buildOverpassQuery(pattern: string): string` — a string Overpass QL completa (bbox do DF + regex nos campos de nome + `out center 30`).
@@ -400,17 +402,17 @@ git commit -m "feat(busca): montagem da query Overpass com padrão tolerante a a
 
 ---
 
-## Tarefa 4: `overpassClient.ts` — `searchDeepOsm`
+## Task 4: `overpassClient.ts` — `searchDeepOsm`
 
 **Files:**
 - Create: `src/services/overpassClient.ts`
 - Test: `src/services/overpassClient.test.ts`
 
 **Interfaces:**
-- Consumes: `toAccentInsensitivePattern`, `buildOverpassQuery` de `./overpassQuery` (Tarefa 3); `timeoutSignal` de `../utils/timeoutSignal` (Tarefa 2); `DF_CENTER` de `../data/dfBounds` (Tarefa 1); `normalize` de `../utils/text`; `haversineDistanceMeters` de `../utils/distance`; `Coordinates`, `PlaceSuggestion` de `../types`.
+- Consumes: `toAccentInsensitivePattern`, `buildOverpassQuery` de `./overpassQuery` (Task 3); `timeoutSignal` de `../utils/timeoutSignal` (Task 2); `DF_CENTER` de `../data/dfBounds` (Task 1); `normalize` de `../utils/text`; `haversineDistanceMeters` de `../utils/distance`; `Coordinates`, `PlaceSuggestion` de `../types`.
 - Produces:
   - `class OverpassRequestError extends Error`
-  - `searchDeepOsm(query: string, proximity: Coordinates | null, signal?: AbortSignal): Promise<PlaceSuggestion[]>` — usado pela Tarefa 6. Devolve no máximo 6 sugestões ordenadas por distância do `proximity` (ou de `DF_CENTER`). `[]` se `normalize(query).length < 4`, se `signal` já estava abortado, ou se o `signal` externo abortar durante a chamada. Lança `OverpassRequestError` em resposta não-ok ou timeout.
+  - `searchDeepOsm(query: string, proximity: Coordinates | null, signal?: AbortSignal): Promise<PlaceSuggestion[]>` — usado pela Task 6. Devolve no máximo 6 sugestões ordenadas por distância do `proximity` (ou de `DF_CENTER`). `[]` se `normalize(query).length < 4`, se `signal` já estava abortado, ou se o `signal` externo abortar durante a chamada. Lança `OverpassRequestError` em resposta não-ok ou timeout.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -745,17 +747,17 @@ git commit -m "feat(busca): cliente searchDeepOsm (Overpass API, busca de refor�
 
 ---
 
-## Tarefa 5: `photonClient.ts` — `searchPhoton`
+## Task 5: `photonClient.ts` — `searchPhoton`
 
 **Files:**
 - Create: `src/services/photonClient.ts`
 - Test: `src/services/photonClient.test.ts`
 
 **Interfaces:**
-- Consumes: `timeoutSignal` de `../utils/timeoutSignal` (Tarefa 2); `DF_BOUNDING_BOX`, `DF_CENTER` de `../data/dfBounds` (Tarefa 1); `Coordinates`, `PlaceSuggestion` de `../types`.
+- Consumes: `timeoutSignal` de `../utils/timeoutSignal` (Task 2); `DF_BOUNDING_BOX`, `DF_CENTER` de `../data/dfBounds` (Task 1); `Coordinates`, `PlaceSuggestion` de `../types`.
 - Produces:
   - `class PhotonRequestError extends Error`
-  - `searchPhoton(query: string, proximity: Coordinates | null, signal?: AbortSignal): Promise<PlaceSuggestion[]>` — usado pela Tarefa 6. No máximo 6 sugestões, **na ordem devolvida pelo Photon** (sem reordenar). `[]` se `query.trim().length < 4`, se `signal` já estava abortado, ou se o `signal` externo abortar durante a chamada. Lança `PhotonRequestError` em resposta não-ok ou timeout.
+  - `searchPhoton(query: string, proximity: Coordinates | null, signal?: AbortSignal): Promise<PlaceSuggestion[]>` — usado pela Task 6. No máximo 6 sugestões, **na ordem devolvida pelo Photon** (sem reordenar). `[]` se `query.trim().length < 4`, se `signal` já estava abortado, ou se o `signal` externo abortar durante a chamada. Lança `PhotonRequestError` em resposta não-ok ou timeout.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -1040,14 +1042,14 @@ git commit -m "feat(busca): cliente searchPhoton (Photon/komoot, busca de refor�
 
 ---
 
-## Tarefa 6: Segundo passe em `useGeocodingSearch.ts`
+## Task 6: Segundo passe em `useGeocodingSearch.ts`
 
 **Files:**
 - Modify: `src/features/search/useGeocodingSearch.ts`
 - Modify: `src/features/search/useGeocodingSearch.test.ts` (só **acrescentar**; nenhum teste existente muda de asserção)
 
 **Interfaces:**
-- Consumes: `searchDeepOsm` de `../../services/overpassClient` (Tarefa 4); `searchPhoton` de `../../services/photonClient` (Tarefa 5).
+- Consumes: `searchDeepOsm` de `../../services/overpassClient` (Task 4); `searchPhoton` de `../../services/photonClient` (Task 5).
 - Produces: nenhuma API pública nova — `useGeocodingSearch` continua devolvendo `{ suggestions, isLoading, error, resolveSuggestion }` com os mesmos tipos. Muda só o comportamento interno: a lista pode ser atualizada **duas vezes** (rápida, depois completada).
 
 ### Contexto para quem implementa
@@ -1471,7 +1473,7 @@ git commit -m "feat(busca): segundo passe (Overpass + Photon) quando o passe rá
 
 ---
 
-## Tarefa 7: CSP e README
+## Task 7: CSP e README
 
 **Files:**
 - Modify: `vercel.json` (linha do `Content-Security-Policy`)
@@ -1539,7 +1541,7 @@ git commit -m "chore(busca): liberar Overpass e Photon no CSP e documentar a bus
 
 ---
 
-## Tarefa 8: Verificação manual no navegador
+## Task 8: Verificação manual no navegador
 
 **Files:** nenhum (verificação, sem código).
 
@@ -1583,7 +1585,7 @@ No preview da Vercel, abrir o console do navegador durante uma busca de reforço
 
 **1. Cobertura do spec:**
 
-| Requisito do spec | Tarefa |
+| Requisito do spec | Task |
 |---|---|
 | Segundo passe: passe rápido inalterado, conta resultados, dispara com < 3 e texto ≥ 4, anexa ao fim sem duplicar | 6 |
 | Photon junto do Overpass no segundo passe (não no passe rápido) | 6 |
@@ -1606,11 +1608,11 @@ Sem lacunas.
 **2. Varredura de placeholders:** nenhum "TBD"/"TODO"/"depois". Todo passo de código tem o código completo; todo passo de teste tem o teste completo.
 
 **3. Consistência de tipos e nomes:**
-- `DF_BOUNDING_BOX` com `{ south, west, north, east }` — criado na Tarefa 1, consumido com esses nomes nas Tarefas 3 (`buildOverpassQuery` desestrutura `south/west/north/east`) e 5 (`bbox` do Photon usa `west/south/east/north`). Consistente.
-- `timeoutSignal(ms, external?) → { signal, cleanup }` — Tarefa 2; consumido igual nas Tarefas 4 e 5 (`const { signal: fetchSignal, cleanup } = timeoutSignal(...)`, `cleanup()` no `finally`).
-- `toAccentInsensitivePattern(term)` / `buildOverpassQuery(pattern)` — Tarefa 3; `searchDeepOsm` (Tarefa 4) chama `buildOverpassQuery(toAccentInsensitivePattern(term))`.
-- `searchDeepOsm(query, proximity, signal?)` e `searchPhoton(query, proximity, signal?)` — Tarefas 4 e 5; chamadas na Tarefa 6 com exatamente `(query, proximity, signal)`, e os testes da Tarefa 6 verificam `expect.any(AbortSignal)` na 3ª posição.
-- `search(query, proximity, signal, lastDeepSearchAtRef, onFastResults)` — assinatura nova na Tarefa 6, com a ref tipada como `{ current: number }`, compatível com `useRef(0)` (`MutableRefObject<number>`).
+- `DF_BOUNDING_BOX` com `{ south, west, north, east }` — criado na Task 1, consumido com esses nomes nas Tasks 3 (`buildOverpassQuery` desestrutura `south/west/north/east`) e 5 (`bbox` do Photon usa `west/south/east/north`). Consistente.
+- `timeoutSignal(ms, external?) → { signal, cleanup }` — Task 2; consumido igual nas Tasks 4 e 5 (`const { signal: fetchSignal, cleanup } = timeoutSignal(...)`, `cleanup()` no `finally`).
+- `toAccentInsensitivePattern(term)` / `buildOverpassQuery(pattern)` — Task 3; `searchDeepOsm` (Task 4) chama `buildOverpassQuery(toAccentInsensitivePattern(term))`.
+- `searchDeepOsm(query, proximity, signal?)` e `searchPhoton(query, proximity, signal?)` — Tasks 4 e 5; chamadas na Task 6 com exatamente `(query, proximity, signal)`, e os testes da Task 6 verificam `expect.any(AbortSignal)` na 3ª posição.
+- `search(query, proximity, signal, lastDeepSearchAtRef, onFastResults)` — assinatura nova na Task 6, com a ref tipada como `{ current: number }`, compatível com `useRef(0)` (`MutableRefObject<number>`).
 - `OverpassRequestError` / `PhotonRequestError` — cada uma no seu cliente; os testes usam `rejects.toBeInstanceOf(...)`. O hook nunca as inspeciona (só `allSettled`).
 - IDs: `osm:${type}:${id}` e `photon:${osm_type}:${osm_id}` — prefixos distintos de `mapbox:` e do `place_id` da Geoapify; `dedupeByProximity` usa `proximityKey` (coordenada), então os prefixos só importam para não colidir como string de id no React.
 
