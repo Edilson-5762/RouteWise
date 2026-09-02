@@ -61,7 +61,7 @@ navegação** a partir do zero, para entender como cada peça funciona por dentr
 - Busca inteligente por **estabelecimento**: quando o termo é uma categoria
   ("farmácia", "banco", "padaria"…), o app consulta em paralelo por categoria
   **e** por texto, para achar tanto a marca específica digitada quanto qualquer
-  estabelecimento próximo daquele tipo.
+  estabelecimento próximo daquele tipo. Quando esse passe rápido traz poucos resultados, uma **busca de reforço** consulta em segundo plano o OpenStreetMap cru (Overpass) e o Photon, cobrindo o DF inteiro, e a lista de sugestões se completa um instante depois.
 - **Locais salvos** (Casa, Trabalho, etc.), persistidos no navegador, como
   atalhos de destino.
 - **Pontos de interesse no mapa**: com zoom aproximado, o mapa exibe marcadores
@@ -141,6 +141,8 @@ precisam vir sempre da rede.
 - [Mapbox Directions API](https://docs.mapbox.com/api/navigation/directions/) — cálculo de rota, ETA e manobras passo a passo
 - [Geoapify Geocoding Autocomplete](https://apidocs.geoapify.com/docs/geocoding/) — busca de endereço com autocomplete
 - [Geoapify Places API](https://apidocs.geoapify.com/docs/places/) — busca por categoria de estabelecimento e pontos de interesse próximos
+- [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) — busca de reforço no OpenStreetMap cru (segundo passe), para lugar pequeno/periférico e nome desatualizado; gratuita, sem chave
+- [Photon](https://photon.komoot.io/) — geocoder gratuito e sem chave, tolerante a erro de digitação, também no segundo passe da busca
 - _(O Geocoding do Mapbox foi testado e descartado: limitado demais para achar endereços específicos e nomes de negócios no Brasil.)_
 
 **Fontes de dados embutidas (sem rede em runtime)**
@@ -297,7 +299,7 @@ app. Por isso:
 
 **Content-Security-Policy** — tudo é `'self'` por padrão; as únicas exceções:
 
-- `connect-src`: `api.mapbox.com`, `events.mapbox.com`, `api.geoapify.com`
+- `connect-src`: `api.mapbox.com`, `events.mapbox.com`, `api.geoapify.com`, `overpass-api.de`, `photon.komoot.io`
 - `img-src`: `'self'`, `data:`, `blob:`, `https://*.mapbox.com` (tiles)
 - `script-src`: `'self'` apenas — **sem `unsafe-inline`**
 - `worker-src` / `child-src`: `'self'` e `blob:` (worker do Mapbox + service worker)
