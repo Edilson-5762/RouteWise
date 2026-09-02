@@ -1,4 +1,4 @@
-import { getManeuverIcon } from '../utils/maneuverIcon';
+import { getManeuverIcon } from './maneuvers/getManeuverIcon';
 import { formatDistance } from '../utils/format';
 import type { RouteStep } from '../types';
 
