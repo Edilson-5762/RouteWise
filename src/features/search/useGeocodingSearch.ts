@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPlaceCategory } from '../../data/placeCategories';
 import {
   searchPlaces,
@@ -7,6 +7,8 @@ import {
 } from '../../services/geoapifyClient';
 import { searchPlacesMapbox } from '../../services/mapboxGeocodingClient';
 import { searchDfHealthUnits } from '../../data/dfHealthUnits';
+import { searchDeepOsm } from '../../services/overpassClient';
+import { searchPhoton } from '../../services/photonClient';
 import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
@@ -16,6 +18,13 @@ const MAX_SUGGESTIONS = 12;
 // só aparece quando todas respondem, uma fonte lenta/travada seguraria a busca
 // inteira. Passado o teto, ela conta como "sem resposta" (lista vazia).
 const PROVIDER_TIMEOUT_MS = 4000;
+// Segundo passe ("busca de reforço"): quando o passe rápido traz pouco,
+// consulta o OSM cru (Overpass) e o Photon em segundo plano e completa a
+// lista. Só dispara com o passe rápido abaixo do piso, texto longo o
+// bastante, e respeitado um descanso entre consultas (uso justo).
+const DEEP_SEARCH_MIN_QUERY_LENGTH = 4;
+const DEEP_SEARCH_RESULT_FLOOR = 3;
+const DEEP_SEARCH_COOLDOWN_MS = 3000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -63,25 +72,26 @@ function interleave(lists: PlaceSuggestion[][]): PlaceSuggestion[] {
   return merged;
 }
 
-// Busca em várias fontes ao mesmo tempo e mescla:
-//  - Cadastro local de unidades de saúde do DF (CNES embutido) → busca em
-//    memória, sem rede; acertos entram NO TOPO da lista;
-//  - Geoapify /autocomplete + Geoapify /search + Mapbox geocoder → busca por
-//    TEXTO (o nome/endereço específico que a pessoa digitou);
-//  - Geoapify Places por categoria → só quando a query bate com um tipo de
-//    estabelecimento (farmácia, banco, academia...), e só para COMPLETAR as
-//    vagas que sobrarem — um "Bradesco" digitado tem que vir antes de uma
-//    agência genérica mais próxima.
-// Uma fonte fora do ar não derruba a busca: só é erro se TODAS as remotas
-// falharem E a busca local também não achar nada.
-async function search(query: string, proximity: Coordinates | null): Promise<PlaceSuggestion[]> {
-  // Fonte local: síncrona, sem rede — não entra na conta de "tudo falhou".
+// Busca em duas etapas:
+//  1) Passe rápido — cadastro local de unidades de saúde no topo +
+//     Geoapify (/autocomplete e /search) + Mapbox + Geoapify Places por
+//     categoria. Igual ao de sempre; entregue via `onFastResults` assim
+//     que fica pronto.
+//  2) Segundo passe (só quando o passe rápido traz < DEEP_SEARCH_RESULT_FLOOR
+//     e a query tem tamanho suficiente e passou o descanso) — Overpass +
+//     Photon em paralelo; os achados são anexados ao fim, sem duplicar.
+// O segundo passe é `allSettled` e nunca relança: só o passe rápido
+// produz o erro de "todas as fontes falharam".
+async function search(
+  query: string,
+  proximity: Coordinates | null,
+  signal: AbortSignal,
+  lastDeepSearchAtRef: { current: number },
+  onFastResults: (results: PlaceSuggestion[]) => void,
+): Promise<PlaceSuggestion[]> {
   const localUnits = searchDfHealthUnits(query, proximity);
-
   const category = matchPlaceCategory(query);
 
-  // Só as fontes que a gente de fato tentou entram na conta de "tudo falhou" —
-  // sem um placeholder resolvido escondendo uma queda geral de rede.
   const tasks: Promise<PlaceSuggestion[]>[] = [
     withTimeout(searchPlaces(query, proximity), PROVIDER_TIMEOUT_MS),
     withTimeout(searchPlacesFullText(query, proximity), PROVIDER_TIMEOUT_MS),
@@ -107,16 +117,49 @@ async function search(query: string, proximity: Coordinates | null): Promise<Pla
     (suggestion) => !seen.has(proximityKey(suggestion)),
   );
 
-  // Unidades locais primeiro; a deduplicação por proximidade descarta a
-  // versão remota de uma unidade que a local já trouxe (a local tem
-  // rótulo melhor).
-  return dedupeByProximity([...localUnits, ...byText, ...byCategory]).slice(0, MAX_SUGGESTIONS);
+  const fastList = dedupeByProximity([...localUnits, ...byText, ...byCategory]).slice(
+    0,
+    MAX_SUGGESTIONS,
+  );
+  onFastResults(fastList);
+
+  const shouldDeepen =
+    fastList.length < DEEP_SEARCH_RESULT_FLOOR &&
+    query.trim().length >= DEEP_SEARCH_MIN_QUERY_LENGTH &&
+    Date.now() - lastDeepSearchAtRef.current >= DEEP_SEARCH_COOLDOWN_MS &&
+    !signal.aborted;
+
+  if (!shouldDeepen) {
+    return fastList;
+  }
+
+  lastDeepSearchAtRef.current = Date.now();
+  const deepOutcomes = await Promise.allSettled([
+    searchDeepOsm(query, proximity, signal),
+    searchPhoton(query, proximity, signal),
+  ]);
+  if (signal.aborted) {
+    return fastList;
+  }
+
+  const deepOf = (index: number): PlaceSuggestion[] =>
+    deepOutcomes[index]?.status === 'fulfilled'
+      ? (deepOutcomes[index] as PromiseFulfilledResult<PlaceSuggestion[]>).value
+      : [];
+
+  // `fastList` na frente: se o mesmo lugar vier dos dois, a versão do
+  // passe rápido (rótulo melhor) vence na deduplicação.
+  return dedupeByProximity([...fastList, ...deepOf(0), ...deepOf(1)]).slice(0, MAX_SUGGESTIONS);
 }
 
 export function useGeocodingSearch(query: string, proximity?: Coordinates | null) {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Marca de quando o último segundo passe começou. Num `useRef` (não em
+  // estado de módulo): vive enquanto a busca está montada — a sessão de
+  // uso — e não vaza entre montagens/testes.
+  const lastDeepSearchAtRef = useRef(0);
 
   useEffect(() => {
     if (query.trim().length < MIN_QUERY_LENGTH) {
@@ -126,10 +169,17 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
     }
 
     let isCancelled = false;
+    const deepController = new AbortController();
     setIsLoading(true);
 
     const timeoutId = setTimeout(() => {
-      search(query, proximity ?? null)
+      search(query, proximity ?? null, deepController.signal, lastDeepSearchAtRef, (fast) => {
+        if (!isCancelled) {
+          setSuggestions(fast);
+          setError(null);
+          setIsLoading(false);
+        }
+      })
         .then((results) => {
           if (!isCancelled) {
             setSuggestions(results);
@@ -152,12 +202,12 @@ export function useGeocodingSearch(query: string, proximity?: Coordinates | null
     return () => {
       isCancelled = true;
       clearTimeout(timeoutId);
+      deepController.abort();
     };
   }, [query, proximity]);
 
-  // Toda sugestão já chega com coordenadas — tanto a Geoapify quanto o
-  // geocoder clássico do Mapbox devolvem tudo em uma única chamada, sem uma
-  // segunda etapa de "retrieve".
+  // Toda sugestão já chega com coordenadas — Geoapify, Mapbox, cadastro
+  // local e o segundo passe (Overpass/Photon) devolvem tudo numa chamada.
   const resolveSuggestion = useCallback(
     async (suggestion: PlaceSuggestion): Promise<GeocodingSuggestion> => {
       return {

@@ -4,6 +4,9 @@ import { useGeocodingSearch } from './useGeocodingSearch';
 import * as geoapifyClient from '../../services/geoapifyClient';
 import * as mapboxGeocodingClient from '../../services/mapboxGeocodingClient';
 import * as dfHealthUnits from '../../data/dfHealthUnits';
+import * as overpassClient from '../../services/overpassClient';
+import * as photonClient from '../../services/photonClient';
+import type { PlaceSuggestion } from '../../types';
 
 describe('useGeocodingSearch', () => {
   beforeEach(() => {
@@ -12,6 +15,8 @@ describe('useGeocodingSearch', () => {
     // sobrescreve o mock localmente.
     vi.spyOn(geoapifyClient, 'searchPlacesFullText').mockResolvedValue([]);
     vi.spyOn(mapboxGeocodingClient, 'searchPlacesMapbox').mockResolvedValue([]);
+    vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([]);
+    vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -335,5 +340,178 @@ describe('useGeocodingSearch', () => {
     });
 
     expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1']);
+  });
+
+  describe('segundo passe (busca de reforço)', () => {
+    it('dispara Overpass e Photon quando o passe rápido traz menos de 3 e a query tem 4+ caracteres', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+        { id: 'geo-1', placeName: 'Único rápido', coordinates: { lat: -15.8, lng: -47.9 } },
+      ]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([
+        { id: 'osm:node:1', placeName: 'Achado profundo', coordinates: { lat: -15.83, lng: -47.97 } },
+      ]);
+      const photonSpy = vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
+
+      const { result } = renderHook(() => useGeocodingSearch('condominio jardim'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).toHaveBeenCalled();
+      expect(photonSpy).toHaveBeenCalled();
+      expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1', 'osm:node:1']);
+      expect(result.current.error).toBeNull();
+    });
+
+    it('não dispara o segundo passe quando o passe rápido já traz 3 ou mais', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+        { id: 'a', placeName: 'A', coordinates: { lat: -15.81, lng: -47.91 } },
+        { id: 'b', placeName: 'B', coordinates: { lat: -15.82, lng: -47.92 } },
+        { id: 'c', placeName: 'C', coordinates: { lat: -15.83, lng: -47.93 } },
+      ]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm');
+      const photonSpy = vi.spyOn(photonClient, 'searchPhoton');
+
+      renderHook(() => useGeocodingSearch('alguma avenida'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).not.toHaveBeenCalled();
+      expect(photonSpy).not.toHaveBeenCalled();
+    });
+
+    it('não dispara o segundo passe para query com menos de 4 caracteres', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm');
+
+      renderHook(() => useGeocodingSearch('rua'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).not.toHaveBeenCalled();
+    });
+
+    it('não duplica no reforço um lugar que o passe rápido já trouxe (o rápido vence)', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+        { id: 'geo-1', placeName: 'Condomínio Jardim (Geoapify)', coordinates: { lat: -15.9, lng: -48.0 } },
+      ]);
+      vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([
+        { id: 'osm:node:9', placeName: 'Condomínio Jardim (OSM)', coordinates: { lat: -15.9, lng: -48.0 } },
+      ]);
+
+      const { result } = renderHook(() => useGeocodingSearch('condominio jardim'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(result.current.suggestions).toHaveLength(1);
+      expect(result.current.suggestions[0].id).toBe('geo-1');
+    });
+
+    it('mantém error nulo e a lista do passe rápido quando o segundo passe falha inteiro', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+        { id: 'geo-1', placeName: 'Um resultado', coordinates: { lat: -15.8, lng: -47.9 } },
+      ]);
+      vi.spyOn(overpassClient, 'searchDeepOsm').mockRejectedValue(new Error('overpass fora'));
+      vi.spyOn(photonClient, 'searchPhoton').mockRejectedValue(new Error('photon fora'));
+
+      const { result } = renderHook(() => useGeocodingSearch('lugar improvavel'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(result.current.error).toBeNull();
+      expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1']);
+    });
+
+    it('respeita o descanso de 3 s entre dois segundos passes', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([]);
+
+      const { rerender } = renderHook(({ q }) => useGeocodingSearch(q), {
+        initialProps: { q: 'lugar um' },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(osmSpy).toHaveBeenCalledTimes(1);
+
+      rerender({ q: 'lugar dois' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(osmSpy).toHaveBeenCalledTimes(1); // menos de 3 s depois → não repetiu
+    });
+
+    it('repassa a proximidade (e um AbortSignal) para o segundo passe', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([]);
+      const photonSpy = vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
+
+      renderHook(() => useGeocodingSearch('lugar distante', { lat: -15.9, lng: -48.0 }));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).toHaveBeenCalledWith(
+        'lugar distante',
+        { lat: -15.9, lng: -48.0 },
+        expect.any(AbortSignal),
+      );
+      expect(photonSpy).toHaveBeenCalledWith(
+        'lugar distante',
+        { lat: -15.9, lng: -48.0 },
+        expect.any(AbortSignal),
+      );
+    });
+
+    it('aborta o segundo passe em andamento quando a query muda e ignora o resultado tardio', async () => {
+      const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([]);
+      let resolveDeep: ((v: PlaceSuggestion[]) => void) | null = null;
+      vi.spyOn(overpassClient, 'searchDeepOsm').mockImplementation(
+        () =>
+          new Promise<PlaceSuggestion[]>((resolve) => {
+            resolveDeep = resolve;
+          }),
+      );
+      vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
+
+      const { result, rerender } = renderHook(({ q }) => useGeocodingSearch(q), {
+        initialProps: { q: 'lugar antigo' },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(overpassClient.searchDeepOsm).toHaveBeenCalledTimes(1);
+      // A atribuição a `resolveDeep` mora dentro do executor da Promise, então o
+      // controle de fluxo do TS ainda o vê como `null` aqui; a asserção só
+      // reafirma o tipo já declarado para poder chamar o resolvedor tardio.
+      const staleResolve = resolveDeep as ((v: PlaceSuggestion[]) => void) | null;
+
+      // Query abaixo do mínimo → o efeito anterior é limpo (abort) e nenhuma
+      // busca nova começa.
+      rerender({ q: 'ab' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(abortSpy).toHaveBeenCalled();
+
+      await act(async () => {
+        staleResolve?.([
+          { id: 'osm:node:tarde', placeName: 'Tarde demais', coordinates: { lat: -15.8, lng: -47.9 } },
+        ]);
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(result.current.suggestions.some((s) => s.id === 'osm:node:tarde')).toBe(false);
+    });
   });
 });
