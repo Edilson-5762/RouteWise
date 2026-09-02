@@ -9,6 +9,7 @@ import { searchPlacesMapbox } from '../../services/mapboxGeocodingClient';
 import { searchDfHealthUnits } from '../../data/dfHealthUnits';
 import { searchDeepOsm } from '../../services/overpassClient';
 import { searchPhoton } from '../../services/photonClient';
+import { normalize } from '../../utils/text';
 import type { Coordinates, GeocodingSuggestion, PlaceSuggestion } from '../../types';
 
 const MIN_QUERY_LENGTH = 3;
@@ -18,13 +19,17 @@ const MAX_SUGGESTIONS = 12;
 // só aparece quando todas respondem, uma fonte lenta/travada seguraria a busca
 // inteira. Passado o teto, ela conta como "sem resposta" (lista vazia).
 const PROVIDER_TIMEOUT_MS = 4000;
-// Segundo passe ("busca de reforço"): quando o passe rápido traz pouco,
-// consulta o OSM cru (Overpass) e o Photon em segundo plano e completa a
-// lista. Só dispara com o passe rápido abaixo do piso, texto longo o
-// bastante, e respeitado um descanso entre consultas (uso justo).
+// Segundo passe ("busca de reforço"): quando o passe rápido NÃO encontra o
+// que foi digitado, consulta o OSM cru (Overpass) e o Photon em segundo
+// plano e completa a lista. Só dispara quando nenhum resultado do passe
+// rápido contém os termos da query, com texto longo o bastante, e
+// respeitado um descanso entre consultas (uso justo).
 const DEEP_SEARCH_MIN_QUERY_LENGTH = 4;
-const DEEP_SEARCH_RESULT_FLOOR = 3;
 const DEEP_SEARCH_COOLDOWN_MS = 3000;
+
+// Palavras curtas ou de ligação não ajudam a identificar um lugar — ficam de
+// fora da checagem de "algum resultado do passe rápido casa com a query".
+const QUERY_MATCH_STOPWORDS = new Set(['para', 'com', 'dos', 'das', 'nos', 'nas', 'por', 'sem']);
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -72,15 +77,33 @@ function interleave(lists: PlaceSuggestion[][]): PlaceSuggestion[] {
   return merged;
 }
 
+// "Encontrou" o destino digitado quando ALGUM resultado do passe rápido
+// contém todas as palavras significativas da query (sem acento, minúsculas).
+// Palavras com menos de 3 letras e as de ligação (QUERY_MATCH_STOPWORDS) não
+// contam. Query só com termos curtos/números → vaga demais para julgar, conta
+// como encontrada (não aciona o reforço).
+function fastResultsCoverQuery(query: string, results: PlaceSuggestion[]): boolean {
+  const terms = normalize(query)
+    .split(/\s+/)
+    .filter((term) => term.length >= 3 && !QUERY_MATCH_STOPWORDS.has(term));
+  if (terms.length === 0) {
+    return true;
+  }
+  return results.some((result) => {
+    const haystack = normalize(result.placeName);
+    return terms.every((term) => haystack.includes(term));
+  });
+}
+
 // Busca em duas etapas:
 //  1) Passe rápido — cadastro local de unidades de saúde no topo +
 //     Geoapify (/autocomplete e /search) + Mapbox + Geoapify Places por
 //     categoria. Igual ao de sempre; entregue via `onFastResults` assim
 //     que fica pronto.
-//  2) Segundo passe (só quando o passe rápido traz < DEEP_SEARCH_RESULT_FLOOR
-//     e a query tem tamanho suficiente; se o descanso ainda não passou, o
-//     passe ESPERA o restante em vez de pular) — Overpass + Photon em
-//     paralelo; os achados são anexados ao fim, sem duplicar.
+//  2) Segundo passe (só quando nenhum resultado do passe rápido contém os
+//     termos da query e a query tem tamanho suficiente; se o descanso ainda
+//     não passou, o passe ESPERA o restante em vez de pular) — Overpass +
+//     Photon em paralelo; os achados são anexados ao fim, sem duplicar.
 // O segundo passe é `allSettled` e nunca relança: só o passe rápido
 // produz o erro de "todas as fontes falharam".
 async function search(
@@ -124,14 +147,15 @@ async function search(
   );
   onFastResults(fastList);
 
-  // Vale a pena o segundo passe? Depende só do que o passe rápido trouxe, do
-  // tamanho do texto e de não estar abortado — NÃO do descanso. O descanso
-  // vira espera, não desistência: o efeito só re-roda quando `query`/
-  // `proximity` mudam, então pular aqui deixaria a query em que o usuário
-  // realmente parou sem reforço para sempre.
+  // Vale a pena o segundo passe? Dispara quando o passe rápido não cobre o
+  // texto digitado (nenhum resultado com todos os termos), o texto é longo o
+  // bastante e não está abortado — NÃO depende do descanso. O descanso vira
+  // espera, não desistência: o efeito só re-roda quando `query`/`proximity`
+  // mudam, então pular aqui deixaria a query em que o usuário realmente parou
+  // sem reforço para sempre.
   const wantsDeepPass =
-    fastList.length < DEEP_SEARCH_RESULT_FLOOR &&
     query.trim().length >= DEEP_SEARCH_MIN_QUERY_LENGTH &&
+    !fastResultsCoverQuery(query, fastList) &&
     !signal.aborted;
 
   if (!wantsDeepPass) {

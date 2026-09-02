@@ -61,7 +61,7 @@ navegação** a partir do zero, para entender como cada peça funciona por dentr
 - Busca inteligente por **estabelecimento**: quando o termo é uma categoria
   ("farmácia", "banco", "padaria"…), o app consulta em paralelo por categoria
   **e** por texto, para achar tanto a marca específica digitada quanto qualquer
-  estabelecimento próximo daquele tipo. Quando esse passe rápido traz poucos resultados, uma **busca de reforço** consulta em segundo plano o OpenStreetMap cru (Overpass) e o Photon, cobrindo o DF inteiro, e a lista de sugestões se completa um instante depois.
+  estabelecimento próximo daquele tipo. Quando nenhum resultado desse passe rápido contém o que foi digitado, uma **busca de reforço** consulta em segundo plano o OpenStreetMap cru (Overpass) e o Photon, cobrindo o DF inteiro, e a lista de sugestões se completa um instante depois.
 - **Locais salvos** (Casa, Trabalho, etc.), persistidos no navegador, como
   atalhos de destino.
 - **Pontos de interesse no mapa**: com zoom aproximado, o mapa exibe marcadores

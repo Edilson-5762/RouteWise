@@ -343,16 +343,38 @@ describe('useGeocodingSearch', () => {
   });
 
   describe('segundo passe (busca de reforço)', () => {
-    it('dispara Overpass e Photon quando o passe rápido traz menos de 3 e a query tem 4+ caracteres', async () => {
+    it('dispara Overpass e Photon quando nenhum resultado do passe rápido casa com o texto buscado', async () => {
+      // Caso real: o passe rápido devolve 3 resultados vagamente parecidos e
+      // nenhum é a padaria buscada. Antes, "3 resultados" já bloqueava o
+      // reforço; agora o que conta é nenhum deles conter os termos digitados.
+      vi.spyOn(geoapifyClient, 'searchPlacesByCategory').mockResolvedValue([]);
       vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-        { id: 'geo-1', placeName: 'Único rápido', coordinates: { lat: -15.8, lng: -47.9 } },
+        {
+          id: 'geo-1',
+          placeName: 'Panificadora Vicente Pires, Vicente Pires - DF',
+          coordinates: { lat: -15.8, lng: -48.02 },
+        },
+        {
+          id: 'geo-2',
+          placeName: 'São Vicente, São Paulo',
+          coordinates: { lat: -23.96, lng: -46.39 },
+        },
+        {
+          id: 'geo-3',
+          placeName: 'Vicente Pires, DF',
+          coordinates: { lat: -15.79, lng: -48.03 },
+        },
       ]);
       const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([
-        { id: 'osm:node:1', placeName: 'Achado profundo', coordinates: { lat: -15.83, lng: -47.97 } },
+        {
+          id: 'osm:node:1',
+          placeName: 'Panificadora Paraíso do Pão, Vicente Pires',
+          coordinates: { lat: -15.81, lng: -48.031 },
+        },
       ]);
       const photonSpy = vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
 
-      const { result } = renderHook(() => useGeocodingSearch('condominio jardim'));
+      const { result } = renderHook(() => useGeocodingSearch('panificadora paraiso do pao'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300);
@@ -360,20 +382,27 @@ describe('useGeocodingSearch', () => {
 
       expect(osmSpy).toHaveBeenCalled();
       expect(photonSpy).toHaveBeenCalled();
-      expect(result.current.suggestions.map((s) => s.id)).toEqual(['geo-1', 'osm:node:1']);
+      expect(result.current.suggestions.map((s) => s.id)).toEqual([
+        'geo-1',
+        'geo-2',
+        'geo-3',
+        'osm:node:1',
+      ]);
       expect(result.current.error).toBeNull();
     });
 
-    it('não dispara o segundo passe quando o passe rápido já traz 3 ou mais', async () => {
+    it('não dispara o segundo passe quando um resultado do passe rápido casa com o texto buscado', async () => {
       vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-        { id: 'a', placeName: 'A', coordinates: { lat: -15.81, lng: -47.91 } },
-        { id: 'b', placeName: 'B', coordinates: { lat: -15.82, lng: -47.92 } },
-        { id: 'c', placeName: 'C', coordinates: { lat: -15.83, lng: -47.93 } },
+        {
+          id: 'r1',
+          placeName: 'Residencial Recanto Verde, Samambaia - DF',
+          coordinates: { lat: -15.88, lng: -48.09 },
+        },
       ]);
       const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm');
       const photonSpy = vi.spyOn(photonClient, 'searchPhoton');
 
-      renderHook(() => useGeocodingSearch('alguma avenida'));
+      renderHook(() => useGeocodingSearch('residencial recanto verde'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(300);
@@ -381,6 +410,46 @@ describe('useGeocodingSearch', () => {
 
       expect(osmSpy).not.toHaveBeenCalled();
       expect(photonSpy).not.toHaveBeenCalled();
+    });
+
+    it('dispara o segundo passe mesmo com a lista do passe rápido cheia, se nenhum resultado casa', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue(
+        Array.from({ length: 12 }, (_, i) => ({
+          id: `cheio-${i}`,
+          placeName: `Resultado solto ${i}`,
+          coordinates: { lat: -15.7 - i * 0.01, lng: -47.8 - i * 0.01 },
+        })),
+      );
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([]);
+      const photonSpy = vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([]);
+
+      renderHook(() => useGeocodingSearch('chacara bela vista'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).toHaveBeenCalled();
+      expect(photonSpy).toHaveBeenCalled();
+    });
+
+    it('ao decidir o segundo passe, compara o texto ignorando acento e maiúscula', async () => {
+      vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+        {
+          id: 'g1',
+          placeName: 'GUARÁ Shopping Center',
+          coordinates: { lat: -15.82, lng: -47.98 },
+        },
+      ]);
+      const osmSpy = vi.spyOn(overpassClient, 'searchDeepOsm');
+
+      renderHook(() => useGeocodingSearch('guará'));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+
+      expect(osmSpy).not.toHaveBeenCalled();
     });
 
     it('não dispara o segundo passe para query com menos de 4 caracteres', async () => {
@@ -397,8 +466,10 @@ describe('useGeocodingSearch', () => {
     });
 
     it('não duplica no reforço um lugar que o passe rápido já trouxe (o rápido vence)', async () => {
+      // O nome do resultado rápido é propositalmente diferente da query, para
+      // o segundo passe disparar e a deduplicação por proximidade ser exercida.
       vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
-        { id: 'geo-1', placeName: 'Condomínio Jardim (Geoapify)', coordinates: { lat: -15.9, lng: -48.0 } },
+        { id: 'geo-1', placeName: 'Residencial Aroeira', coordinates: { lat: -15.9, lng: -48.0 } },
       ]);
       vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([
         { id: 'osm:node:9', placeName: 'Condomínio Jardim (OSM)', coordinates: { lat: -15.9, lng: -48.0 } },

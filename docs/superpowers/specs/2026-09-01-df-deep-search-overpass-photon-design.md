@@ -37,12 +37,18 @@ exigem conta) ficam para uma fase seguinte, se ainda faltar.
 ## Requisitos (decididos com o usuário)
 
 - **Modelo de disparo — "segundo passe".** O passe rápido de hoje roda
-  igual e a lista aparece igual. Logo depois, o hook conta os
-  resultados; se vier **menos de 3** e o texto tiver **≥ 4
-  caracteres**, dispara Overpass + Photon em segundo plano. Quando
+  igual e a lista aparece igual. Logo depois, o hook checa a
+  **relevância**: se **nenhum** resultado do passe rápido contém todas
+  as palavras significativas do texto digitado (sem acento/caixa;
+  palavras de 1–2 letras e de ligação não contam) e o texto tiver **≥
+  4 caracteres**, dispara Overpass + Photon em segundo plano. Quando
   voltam (1–3 s depois), os achados novos são **anexados ao fim** da
   lista já visível, sem duplicar o que o passe rápido já trouxe. A
   lista cresce sozinha.
+  _(Revisado 2026-09-02: o gatilho original — "menos de 3 resultados" —
+  quase nunca disparava, porque Geoapify/Mapbox quase sempre devolvem 3+
+  resultados vagamente parecidos. Trocado por esta checagem de
+  relevância.)_
 - **Photon fica no segundo passe, junto do Overpass** — não entra no
   passe rápido. O ganho dele é menor e não vale mexer no passe rápido,
   que funciona.
@@ -300,8 +306,10 @@ corta em `MAX_SUGGESTIONS` (6).
 
 ```ts
 const DEEP_SEARCH_MIN_QUERY_LENGTH = 4;
-const DEEP_SEARCH_RESULT_FLOOR = 3;     // passe rápido com < 3 → dispara
 const DEEP_SEARCH_COOLDOWN_MS = 3000;
+// Revisado 2026-09-02: DEEP_SEARCH_RESULT_FLOOR removido. Em vez de contar
+// resultados, o gatilho agora é uma checagem de relevância — ver o helper
+// `fastResultsCoverQuery` e a nota no requisito "Modelo de disparo".
 ```
 
 **Estado de módulo** (fora do hook, como o descanso é por aba/sessão):
@@ -328,8 +336,9 @@ Fluxo:
    `interleave`/`dedupeByProximity` + `slice(0, MAX_SUGGESTIONS)`).
    Chame o resultado de `fastList`.
 2. `onFastResults(fastList)` — a UI mostra já.
-3. **Decide o segundo passe.** Dispara sse:
-   - `fastList.length < DEEP_SEARCH_RESULT_FLOOR`; **e**
+3. **Decide o segundo passe.** Dispara sse (revisado 2026-09-02):
+   - `!fastResultsCoverQuery(query, fastList)` — nenhum resultado do
+     passe rápido contém todas as palavras significativas da query; **e**
    - `query.trim().length >= DEEP_SEARCH_MIN_QUERY_LENGTH`; **e**
    - `Date.now() - lastDeepSearchStartedAt >= DEEP_SEARCH_COOLDOWN_MS`; **e**
    - `!signal.aborted`.
@@ -495,10 +504,13 @@ igual às da Geoapify/Mapbox.
     `vi.spyOn(photonClient, 'searchPhoton').mockResolvedValue([])`
     (padrão desligado, como já se faz com fullText/mapbox); asserções
     dos casos existentes **não mudam**;
-  - passe rápido com < 3 resultados e query ≥ 4 chars → `searchDeepOsm`
-    **e** `searchPhoton` são chamados, e os achados do segundo passe
-    aparecem **anexados ao fim** da lista;
-  - passe rápido com ≥ 3 resultados → nenhum dos dois é chamado;
+  - nenhum resultado do passe rápido casa com o texto e query ≥ 4 chars
+    → `searchDeepOsm` **e** `searchPhoton` são chamados, e os achados do
+    segundo passe aparecem **anexados ao fim** da lista;
+  - algum resultado do passe rápido contém todos os termos da query →
+    nenhum dos dois é chamado (inclusive ignorando acento/caixa);
+  - passe rápido com a lista cheia (12), mas nenhum casando → dispara
+    mesmo assim (o gatilho não é mais contagem);
   - query com 3 caracteres → nenhum dos dois é chamado (piso de 4);
   - achado do segundo passe com a mesma coordenada (~11 m) de um do
     passe rápido **não duplica** (o do passe rápido vence);
