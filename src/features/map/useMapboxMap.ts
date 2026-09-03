@@ -4,7 +4,11 @@ import mapboxgl from 'mapbox-gl';
 import type { Coordinates, MapChromeInsets, Route, TravelProfile } from '../../types';
 import { getPuckIconMarkup } from '../../utils/vehicleAvatar';
 import { formatSpeedKmh } from '../../utils/format';
-import { haversineDistanceMeters, signedBearingDelta, type RouteProjection } from '../../utils/distance';
+import {
+  haversineDistanceMeters,
+  signedBearingDelta,
+  type RouteProjection,
+} from '../../utils/distance';
 import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
@@ -530,8 +534,7 @@ export function useMapboxMap({
       }
 
       const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
-        | mapboxgl.GeoJSONSource
-        | undefined;
+        mapboxgl.GeoJSONSource | undefined;
       if (arrowSource) {
         arrowSource.setData(maneuverArrowGeojson);
       } else {
@@ -632,12 +635,9 @@ export function useMapboxMap({
       );
     }
     const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
-      | mapboxgl.GeoJSONSource
-      | undefined;
+      mapboxgl.GeoJSONSource | undefined;
     if (arrowSource) {
-      arrowSource.setData(
-        buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex),
-      );
+      arrowSource.setData(buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex));
     }
   }, [route, origin, isNavigating, currentStepIndex, projectVehicle]);
 

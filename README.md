@@ -61,7 +61,7 @@ navegação** a partir do zero, para entender como cada peça funciona por dentr
 - Busca inteligente por **estabelecimento**: quando o termo é uma categoria
   ("farmácia", "banco", "padaria"…), o app consulta em paralelo por categoria
   **e** por texto, para achar tanto a marca específica digitada quanto qualquer
-  estabelecimento próximo daquele tipo.
+  estabelecimento próximo daquele tipo. Quando nenhum resultado desse passe rápido contém o que foi digitado, uma **busca de reforço** consulta em segundo plano o OpenStreetMap cru (Overpass) e o Photon, cobrindo o DF inteiro, e a lista de sugestões se completa um instante depois.
 - **Locais salvos** (Casa, Trabalho, etc.), persistidos no navegador, como
   atalhos de destino.
 - **Pontos de interesse no mapa**: com zoom aproximado, o mapa exibe marcadores
@@ -141,7 +141,21 @@ precisam vir sempre da rede.
 - [Mapbox Directions API](https://docs.mapbox.com/api/navigation/directions/) — cálculo de rota, ETA e manobras passo a passo
 - [Geoapify Geocoding Autocomplete](https://apidocs.geoapify.com/docs/geocoding/) — busca de endereço com autocomplete
 - [Geoapify Places API](https://apidocs.geoapify.com/docs/places/) — busca por categoria de estabelecimento e pontos de interesse próximos
+- [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) — busca de reforço no OpenStreetMap cru (segundo passe), para lugar pequeno/periférico e nome desatualizado; gratuita, sem chave
+- [Photon](https://photon.komoot.io/) — geocoder gratuito e sem chave, tolerante a erro de digitação, também no segundo passe da busca
 - _(O Geocoding do Mapbox foi testado e descartado: limitado demais para achar endereços específicos e nomes de negócios no Brasil.)_
+
+**Fontes de dados embutidas (sem rede em runtime)**
+
+- [CNES / DATASUS](https://cnes.datasus.gov.br/) — cadastro de domínio
+  público de onde é destilado `src/data/dfHealthUnits.generated.ts`, a
+  lista local de unidades públicas de saúde do DF (UBS, postos,
+  hospitais regionais, UPAs, CAPS) que o OpenStreetMap/Mapbox não
+  cobrem. A busca de destino consulta essa lista em memória e mostra os
+  acertos no topo. Regeração **manual e opcional**: `npm run
+generate:unidades-saude` (o arquivo já vem versionado; o app não baixa
+  nada em runtime nem no build). Correções pontuais de nome/coordenada
+  ficam em `scripts/data/unidades-saude.overrides.json`.
 
 **APIs do navegador**
 
@@ -285,7 +299,7 @@ app. Por isso:
 
 **Content-Security-Policy** — tudo é `'self'` por padrão; as únicas exceções:
 
-- `connect-src`: `api.mapbox.com`, `events.mapbox.com`, `api.geoapify.com`
+- `connect-src`: `api.mapbox.com`, `events.mapbox.com`, `api.geoapify.com`, `overpass-api.de`, `photon.komoot.io`
 - `img-src`: `'self'`, `data:`, `blob:`, `https://*.mapbox.com` (tiles)
 - `script-src`: `'self'` apenas — **sem `unsafe-inline`**
 - `worker-src` / `child-src`: `'self'` e `blob:` (worker do Mapbox + service worker)
@@ -394,18 +408,19 @@ _"Adicionar à tela inicial"_ no menu do navegador.
 
 ## Scripts disponíveis
 
-| Comando                       | Descrição                                                          |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `npm run dev`                 | Servidor de desenvolvimento (<http://localhost:5173>)              |
-| `npm run build`               | Build de produção (`tsc -b` + `vite build`)                        |
-| `npm run preview`             | Serve a build de produção localmente                               |
-| `npm run test`                | Roda a suíte de testes (Vitest)                                    |
-| `npm run test:watch`          | Testes em modo _watch_                                             |
-| `npm run lint`                | ESLint                                                             |
-| `npm run format`              | Formata o código com Prettier                                      |
-| `npm run format:check`        | Verifica a formatação (usado no CI)                                |
-| `npm run generate:pwa-assets` | Regera favicon e ícones de PWA a partir de `public/logo.svg`       |
-| `npm run generate:og`         | Regera `public/og-card.png` a partir de `assets/brand/og-card.svg` |
+| Comando                           | Descrição                                                                                 |
+| --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Servidor de desenvolvimento (<http://localhost:5173>)                                     |
+| `npm run build`                   | Build de produção (`tsc -b` + `vite build`)                                               |
+| `npm run preview`                 | Serve a build de produção localmente                                                      |
+| `npm run test`                    | Roda a suíte de testes (Vitest)                                                           |
+| `npm run test:watch`              | Testes em modo _watch_                                                                    |
+| `npm run lint`                    | ESLint                                                                                    |
+| `npm run format`                  | Formata o código com Prettier                                                             |
+| `npm run format:check`            | Verifica a formatação (usado no CI)                                                       |
+| `npm run generate:pwa-assets`     | Regera favicon e ícones de PWA a partir de `public/logo.svg`                              |
+| `npm run generate:og`             | Regera `public/og-card.png` a partir de `assets/brand/og-card.svg`                        |
+| `npm run generate:unidades-saude` | Regera `src/data/dfHealthUnits.generated.ts` a partir do CNES/DATASUS (manual e opcional) |
 
 ---
 

@@ -35,8 +35,7 @@ export function NavigationView({
   // passo `currentStepIndex`, o que interessa mostrar e falar é a PRÓXIMA
   // manobra (a que você ainda vai fazer), com a distância que falta até ela.
   const stepCount = state.route?.steps.length ?? 0;
-  const upcomingStepIndex =
-    stepCount > 0 ? Math.min(state.currentStepIndex + 1, stepCount - 1) : 0;
+  const upcomingStepIndex = stepCount > 0 ? Math.min(state.currentStepIndex + 1, stepCount - 1) : 0;
   const currentStep = state.route?.steps[upcomingStepIndex] ?? null;
   const currentStepInstruction = currentStep?.instruction ?? null;
 

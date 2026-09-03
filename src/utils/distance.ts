@@ -103,7 +103,10 @@ export function projectOntoRoute(
   }
 
   const fromIndex = Math.max(0, Math.min(window?.fromIndex ?? 0, line.length - 2));
-  const toIndex = Math.max(fromIndex, Math.min(window?.toIndex ?? line.length - 2, line.length - 2));
+  const toIndex = Math.max(
+    fromIndex,
+    Math.min(window?.toIndex ?? line.length - 2, line.length - 2),
+  );
 
   // Comprimento dos segmentos antes da janela, para `alongMeters` ficar
   // relativo ao início da rota (não ao início da janela).

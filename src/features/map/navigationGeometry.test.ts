@@ -50,8 +50,8 @@ describe('buildNavigationRouteGeojson (navegação)', () => {
       expect(lng).toBeCloseTo(0, 6);
     }
     // O ponto projetado (na latitude do veículo) está na linha.
-    const hasProjected = feature.geometry.coordinates.some(([, lat]) =>
-      Math.abs(lat - 0.00205) < 0.0001,
+    const hasProjected = feature.geometry.coordinates.some(
+      ([, lat]) => Math.abs(lat - 0.00205) < 0.0001,
     );
     expect(hasProjected).toBe(true);
   });

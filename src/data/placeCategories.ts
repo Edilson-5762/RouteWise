@@ -26,13 +26,7 @@ export const PLACE_CATEGORIES: PlaceCategoryDefinition[] = [
     // reconhecendo como categoria, a busca por proximidade traz os postos
     // próximos. Inclui hospital na categoria da Geoapify porque parte das UBS
     // do DF está mapeada como `amenity=hospital` no OSM.
-    keywords: [
-      'clinica',
-      'posto de saude',
-      'ubs',
-      'unidade basica de saude',
-      'unidade de saude',
-    ],
+    keywords: ['clinica', 'posto de saude', 'ubs', 'unidade basica de saude', 'unidade de saude'],
     geoapifyCategory: 'healthcare.clinic_or_praxis,healthcare.hospital',
     categoryLabel: 'Clínica',
   },
