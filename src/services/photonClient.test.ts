@@ -9,10 +9,7 @@ function lastFetchUrl(): string {
   return String((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
 }
 
-function feature(
-  coordinates: [number, number] | undefined,
-  properties: Record<string, unknown>,
-) {
+function feature(coordinates: [number, number] | undefined, properties: Record<string, unknown>) {
   return { geometry: coordinates ? { coordinates } : undefined, properties };
 }
 
@@ -44,7 +41,12 @@ describe('searchPhoton', () => {
   it('converte a FeatureCollection preservando a ordem do Photon', async () => {
     mockFetchOnceJson({
       features: [
-        feature([-47.95, -15.86], { name: 'Primeiro', countrycode: 'BR', osm_type: 'N', osm_id: 1 }),
+        feature([-47.95, -15.86], {
+          name: 'Primeiro',
+          countrycode: 'BR',
+          osm_type: 'N',
+          osm_id: 1,
+        }),
         feature([-47.91, -15.81], { name: 'Segundo', countrycode: 'BR', osm_type: 'N', osm_id: 2 }),
       ],
     });

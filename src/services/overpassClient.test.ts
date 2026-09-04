@@ -32,7 +32,9 @@ describe('searchDeepOsm', () => {
     await searchDeepOsm('guará', { lat: -15.8, lng: -47.9 });
     const body = lastFetchBody();
     expect(body).toContain('[out:json][timeout:8];');
-    expect(body).toContain('"^(name|name:pt|alt_name|old_name|short_name|official_name|loc_name|brand)$"');
+    expect(body).toContain(
+      '"^(name|name:pt|alt_name|old_name|short_name|official_name|loc_name|brand)$"',
+    );
     expect(body).toContain('(-16.1,-48.35,-15.4,-47.3);');
     // "guará" normalizado ("guara") e expandido em classes por vogal
     expect(body).toContain('g[uúùû][aáàâãä]r[aáàâãä]');

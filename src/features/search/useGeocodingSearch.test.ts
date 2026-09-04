@@ -472,7 +472,11 @@ describe('useGeocodingSearch', () => {
         { id: 'geo-1', placeName: 'Residencial Aroeira', coordinates: { lat: -15.9, lng: -48.0 } },
       ]);
       vi.spyOn(overpassClient, 'searchDeepOsm').mockResolvedValue([
-        { id: 'osm:node:9', placeName: 'Condomínio Jardim (OSM)', coordinates: { lat: -15.9, lng: -48.0 } },
+        {
+          id: 'osm:node:9',
+          placeName: 'Condomínio Jardim (OSM)',
+          coordinates: { lat: -15.9, lng: -48.0 },
+        },
       ]);
 
       const { result } = renderHook(() => useGeocodingSearch('condominio jardim'));
@@ -607,7 +611,11 @@ describe('useGeocodingSearch', () => {
 
       await act(async () => {
         staleResolve?.([
-          { id: 'osm:node:tarde', placeName: 'Tarde demais', coordinates: { lat: -15.8, lng: -47.9 } },
+          {
+            id: 'osm:node:tarde',
+            placeName: 'Tarde demais',
+            coordinates: { lat: -15.8, lng: -47.9 },
+          },
         ]);
         await vi.advanceTimersByTimeAsync(300);
       });
