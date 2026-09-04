@@ -47,8 +47,24 @@ describe('selectGuidance', () => {
       instruction: 'fallback',
       distanceMeters: 800,
       banners: [
-        { triggerDistanceMeters: 800, primaryText: 'longe', secondaryText: null, maneuverType: 'turn', maneuverModifier: 'left', roundaboutDegrees: null, lanes: [] },
-        { triggerDistanceMeters: 200, primaryText: 'perto', secondaryText: null, maneuverType: 'turn', maneuverModifier: 'left', roundaboutDegrees: null, lanes: [] },
+        {
+          triggerDistanceMeters: 800,
+          primaryText: 'longe',
+          secondaryText: null,
+          maneuverType: 'turn',
+          maneuverModifier: 'left',
+          roundaboutDegrees: null,
+          lanes: [],
+        },
+        {
+          triggerDistanceMeters: 200,
+          primaryText: 'perto',
+          secondaryText: null,
+          maneuverType: 'turn',
+          maneuverModifier: 'left',
+          roundaboutDegrees: null,
+          lanes: [],
+        },
       ],
     });
     const r = route([step(), upcoming]);
@@ -58,7 +74,15 @@ describe('selectGuidance', () => {
   });
 
   it('sem banners, cai para a instruction e o tipo do passo', () => {
-    const r = route([step(), step({ instruction: 'Vire à esquerda', maneuverType: 'turn', maneuverModifier: 'left', banners: [] })]);
+    const r = route([
+      step(),
+      step({
+        instruction: 'Vire à esquerda',
+        maneuverType: 'turn',
+        maneuverModifier: 'left',
+        banners: [],
+      }),
+    ]);
     const g = selectGuidance(r, 0, 300);
     expect(g?.primaryText).toBe('Vire à esquerda');
     expect(g?.secondaryText).toBeNull();
@@ -71,8 +95,24 @@ describe('selectGuidance', () => {
     const upcoming = step({
       distanceMeters: 900,
       banners: [
-        { triggerDistanceMeters: 900, primaryText: 'x', secondaryText: null, maneuverType: 'turn', maneuverModifier: 'right', roundaboutDegrees: null, lanes: [] },
-        { triggerDistanceMeters: 500, primaryText: 'x', secondaryText: null, maneuverType: 'turn', maneuverModifier: 'right', roundaboutDegrees: null, lanes },
+        {
+          triggerDistanceMeters: 900,
+          primaryText: 'x',
+          secondaryText: null,
+          maneuverType: 'turn',
+          maneuverModifier: 'right',
+          roundaboutDegrees: null,
+          lanes: [],
+        },
+        {
+          triggerDistanceMeters: 500,
+          primaryText: 'x',
+          secondaryText: null,
+          maneuverType: 'turn',
+          maneuverModifier: 'right',
+          roundaboutDegrees: null,
+          lanes,
+        },
       ],
     });
     const r = route([step(), upcoming]);
@@ -83,31 +123,55 @@ describe('selectGuidance', () => {
   it('faixas: vazias se o banner ativo não tem faixa, mesmo perto', () => {
     const upcoming = step({
       distanceMeters: 300,
-      banners: [{ triggerDistanceMeters: 300, primaryText: 'x', secondaryText: null, maneuverType: 'turn', maneuverModifier: 'right', roundaboutDegrees: null, lanes: [] }],
+      banners: [
+        {
+          triggerDistanceMeters: 300,
+          primaryText: 'x',
+          secondaryText: null,
+          maneuverType: 'turn',
+          maneuverModifier: 'right',
+          roundaboutDegrees: null,
+          lanes: [],
+        },
+      ],
     });
     expect(selectGuidance(route([step(), upcoming]), 0, 100)?.lanes).toEqual([]);
   });
 
   it('then: null quando a manobra seguinte está longe; preenchido quando <= 400 m; null quando não há passo depois', () => {
-    const mkNext = (dist: number) => route([
-      step(),
-      step({ instruction: 'Vire à direita', maneuverType: 'turn', maneuverModifier: 'right', distanceMeters: dist }),
-      step({ instruction: 'Vire à esquerda', maneuverType: 'turn', maneuverModifier: 'left' }),
-    ]);
+    const mkNext = (dist: number) =>
+      route([
+        step(),
+        step({
+          instruction: 'Vire à direita',
+          maneuverType: 'turn',
+          maneuverModifier: 'right',
+          distanceMeters: dist,
+        }),
+        step({ instruction: 'Vire à esquerda', maneuverType: 'turn', maneuverModifier: 'left' }),
+      ]);
     expect(selectGuidance(mkNext(900), 0, 500)?.then).toBeNull();
     const then = selectGuidance(mkNext(250), 0, 500)?.then;
     expect(then?.text).toBe('Vire à esquerda');
     expect(then?.maneuverType).toBe('turn');
     expect(then?.maneuverModifier).toBe('left');
     // próximo passo é o último → sem "then"
-    const r2 = route([step(), step({ instruction: 'Chegou', maneuverType: 'arrive', distanceMeters: 100 })]);
+    const r2 = route([
+      step(),
+      step({ instruction: 'Chegou', maneuverType: 'arrive', distanceMeters: 100 }),
+    ]);
     expect(selectGuidance(r2, 0, 300)?.then).toBeNull();
   });
 
   it('currentRoadName vem do passo sendo percorrido; vazio quando ausente ou fora do range', () => {
-    const r = route([step({ roadName: '2ª Avenida Norte' }), step({ instruction: 'Vire', maneuverType: 'turn', maneuverModifier: 'right' })]);
+    const r = route([
+      step({ roadName: '2ª Avenida Norte' }),
+      step({ instruction: 'Vire', maneuverType: 'turn', maneuverModifier: 'right' }),
+    ]);
     expect(selectGuidance(r, 0, 300)?.currentRoadName).toBe('2ª Avenida Norte');
-    expect(selectGuidance(route([step({ roadName: '' }), step()]), 0, 300)?.currentRoadName).toBe('');
+    expect(selectGuidance(route([step({ roadName: '' }), step()]), 0, 300)?.currentRoadName).toBe(
+      '',
+    );
     expect(selectGuidance(r, 9, 300)?.currentRoadName).toBe('');
   });
 
@@ -115,7 +179,17 @@ describe('selectGuidance', () => {
     const upcoming = step({
       distanceMeters: 700,
       roundaboutExit: 3,
-      banners: [{ triggerDistanceMeters: 700, primaryText: 'Rotatória', secondaryText: null, maneuverType: 'roundabout', maneuverModifier: 'right', roundaboutDegrees: 240, lanes: [] }],
+      banners: [
+        {
+          triggerDistanceMeters: 700,
+          primaryText: 'Rotatória',
+          secondaryText: null,
+          maneuverType: 'roundabout',
+          maneuverModifier: 'right',
+          roundaboutDegrees: 240,
+          lanes: [],
+        },
+      ],
     });
     const g = selectGuidance(route([step(), upcoming]), 0, null);
     expect(g?.roundaboutDegrees).toBe(240);

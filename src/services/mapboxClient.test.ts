@@ -219,7 +219,12 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [{ steps: [] }],
@@ -241,7 +246,12 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [
@@ -260,7 +270,12 @@ describe('getDirections', () => {
                     bannerInstructions: [
                       {
                         distanceAlongGeometry: 400,
-                        primary: { text: 'Qn 401/402 Conjunto L', type: 'roundabout', modifier: 'right', degrees: 135 },
+                        primary: {
+                          text: 'Qn 401/402 Conjunto L',
+                          type: 'roundabout',
+                          modifier: 'right',
+                          degrees: 135,
+                        },
                         secondary: null,
                         sub: {
                           text: '',
@@ -272,7 +287,12 @@ describe('getDirections', () => {
                       },
                       {
                         distanceAlongGeometry: 1200,
-                        primary: { text: 'Qn 401/402 Conjunto L', type: 'roundabout', modifier: 'right', degrees: 135 },
+                        primary: {
+                          text: 'Qn 401/402 Conjunto L',
+                          type: 'roundabout',
+                          modifier: 'right',
+                          degrees: 135,
+                        },
                         secondary: { text: '1ª Avenida Norte' },
                         sub: null,
                       },
@@ -317,14 +337,23 @@ describe('getDirections', () => {
         code: 'Ok',
         routes: [
           {
-            geometry: { coordinates: [[-46.6333, -23.5505], [-46.63, -23.55]] },
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
             distance: 1200,
             duration: 300,
             legs: [
               {
                 steps: [
                   {
-                    maneuver: { instruction: 'Siga em frente', location: [-46.6333, -23.5505], type: 'depart' },
+                    maneuver: {
+                      instruction: 'Siga em frente',
+                      location: [-46.6333, -23.5505],
+                      type: 'depart',
+                    },
                     distance: 1200,
                     duration: 300,
                   },

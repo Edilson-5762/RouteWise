@@ -5,7 +5,9 @@ import { ThenPreview } from './ThenPreview';
 describe('ThenPreview', () => {
   it('mostra o rótulo "Depois", o texto e um ícone', () => {
     const { getByText, container } = render(
-      <ThenPreview then={{ maneuverType: 'turn', maneuverModifier: 'left', text: 'Rua das Flores' }} />,
+      <ThenPreview
+        then={{ maneuverType: 'turn', maneuverModifier: 'left', text: 'Rua das Flores' }}
+      />,
     );
     expect(getByText('Depois')).toBeInTheDocument();
     expect(getByText('Rua das Flores')).toBeInTheDocument();
