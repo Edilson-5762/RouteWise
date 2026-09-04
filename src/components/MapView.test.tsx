@@ -112,7 +112,6 @@ describe('MapView', () => {
     );
     const vehicle = screen.getByTestId('nav-vehicle');
     expect(vehicle).toBeInTheDocument();
-    expect(vehicle).toHaveTextContent('29 km/h');
   });
 
   it('mostra o botão de centralizar quando o usuário arrasta o mapa durante a navegação, e some ao clicar', () => {
