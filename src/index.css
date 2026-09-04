@@ -12,6 +12,8 @@
     --color-success: 22 163 74;
     --color-warning: 217 119 6;
     --color-danger: 220 38 38;
+    --color-maneuver: 12 59 63; /* teal escuro do painel de manobra (fixo nos dois temas) */
+    --color-maneuver-foreground: 255 255 255;
   }
 
   :root.dark {

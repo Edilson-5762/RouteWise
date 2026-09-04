@@ -17,6 +17,10 @@ export default {
         success: 'rgb(var(--color-success) / <alpha-value>)',
         warning: 'rgb(var(--color-warning) / <alpha-value>)',
         danger: 'rgb(var(--color-danger) / <alpha-value>)',
+        maneuver: {
+          DEFAULT: 'rgb(var(--color-maneuver) / <alpha-value>)',
+          foreground: 'rgb(var(--color-maneuver-foreground) / <alpha-value>)',
+        },
       },
     },
   },

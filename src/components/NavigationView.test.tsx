@@ -128,6 +128,57 @@ describe('NavigationView', () => {
     expect(onExit).toHaveBeenCalled();
   });
 
+  it('mostra a pílula com a via atual quando o passo tem roadName', () => {
+    const state: NavigationState = {
+      ...navigatingState,
+      route: {
+        ...navigatingState.route!,
+        steps: [
+          { ...navigatingState.route!.steps[0], roadName: '2ª Avenida Norte' },
+          {
+            instruction: 'Vire à esquerda',
+            distanceMeters: 100,
+            durationSeconds: 20,
+            maneuverLocation: { lat: -23.55, lng: -46.64 },
+            maneuverType: 'turn',
+            maneuverModifier: 'left',
+          },
+        ],
+      },
+    };
+    render(
+      <NavigationView
+        state={state}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={null}
+        isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
+        onExit={vi.fn()}
+        onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('2ª Avenida Norte')).toBeInTheDocument();
+  });
+
+  it('mostra o velocímetro com a velocidade atual', () => {
+    render(
+      <NavigationView
+        state={navigatingState}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={10}
+        isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
+        onExit={vi.fn()}
+        onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('36')).toBeInTheDocument();
+  });
+
   it('pede a trava de tela (wake lock) enquanto está navegando', async () => {
     const request = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) });
     Object.defineProperty(globalThis.navigator, 'wakeLock', {

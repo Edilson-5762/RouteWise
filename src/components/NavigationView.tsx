@@ -4,6 +4,9 @@ import { ManeuverBanner } from './ManeuverBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
 import { ErrorBanner } from './ErrorBanner';
+import { CurrentRoadPill } from './CurrentRoadPill';
+import { Speedometer } from './Speedometer';
+import { selectGuidance } from '../features/navigation/selectGuidance';
 import { useVoiceGuidance } from '../features/voice/useVoiceGuidance';
 import { useWakeLock } from '../features/wakelock/useWakeLock';
 import type { NavigationState } from '../types';
@@ -45,6 +48,13 @@ export function NavigationView({
         ? { instruction: currentStepInstruction, key: String(upcomingStepIndex) }
         : null,
     [currentStepInstruction, upcomingStepIndex],
+  );
+  // View-model do painel de manobra estilo Waze (distância, textos, faixas,
+  // "Depois", via atual). Fica junto dos outros derivados, ANTES das saídas
+  // antecipadas — não pode virar hook condicional.
+  const guidance = useMemo(
+    () => selectGuidance(state.route, state.currentStepIndex, state.distanceToManeuverMeters),
+    [state.route, state.currentStepIndex, state.distanceToManeuverMeters],
   );
   const voice = useVoiceGuidance(upcomingManeuver, state.distanceToManeuverMeters, {
     enabled: state.status === 'navigating',
@@ -108,10 +118,7 @@ export function NavigationView({
     // avisos, barra de status) precisa reativar pointer-events-auto para si.
     <div className="relative flex h-screen flex-col pointer-events-none">
       <div className="pointer-events-auto">
-        <ManeuverBanner
-          step={currentStep}
-          distanceToManeuverMeters={state.distanceToManeuverMeters}
-        />
+        <ManeuverBanner guidance={guidance} />
       </div>
       {isRecalculating && (
         <div
@@ -134,11 +141,23 @@ export function NavigationView({
           no fluxo flex — não precisa mais desativar pointer-events sozinha. */}
       <div className="flex-1" />
 
+      {/* Velocímetro (esq.) e pílula da via atual (centro), estilo Waze, logo
+          acima da barra de status. O espaçador à direita mantém a pílula
+          centrada mesmo sem nada do lado direito. */}
+      <div className="pointer-events-none flex items-end justify-between px-3 pb-2">
+        <div className="pointer-events-auto">
+          <Speedometer speedMetersPerSecond={speedMetersPerSecond} />
+        </div>
+        <div className="pointer-events-auto">
+          <CurrentRoadPill name={guidance?.currentRoadName ?? ''} />
+        </div>
+        <div className="w-14" aria-hidden="true" />
+      </div>
+
       <div className="pointer-events-auto">
         <NavigationStatusBar
           durationSeconds={remainingDurationSeconds}
           distanceMeters={remainingDistanceMeters}
-          speedMetersPerSecond={speedMetersPerSecond}
           isVoiceSupported={voice.isSupported}
           isVoiceMuted={voice.isMuted}
           onToggleVoice={voice.toggleMute}

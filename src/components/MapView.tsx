@@ -4,7 +4,6 @@ import { useMapboxMap } from '../features/map/useMapboxMap';
 import { useNearbyPlacesMarkers } from '../features/places/useNearbyPlacesMarkers';
 import { NAV_PUCK_VERTICAL_OFFSET_RATIO, NAV_VEHICLE_ICON_PX } from '../features/map/navConstants';
 import { getPuckIconMarkup } from '../utils/vehicleAvatar';
-import { formatSpeedKmh } from '../utils/format';
 import type {
   Coordinates,
   GeocodingSuggestion,
@@ -94,12 +93,6 @@ export function MapView({
             filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.55))',
           }}
         >
-          <div
-            className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold leading-none text-white shadow"
-            style={{ marginBottom: -6, zIndex: 1 }}
-          >
-            {formatSpeedKmh(speedMetersPerSecond)}
-          </div>
           <div
             style={{ width: NAV_VEHICLE_ICON_PX, height: NAV_VEHICLE_ICON_PX }}
             dangerouslySetInnerHTML={{ __html: navVehicleMarkup }}
