@@ -1,36 +1,46 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { Coordinates } from '../../types';
+import { isNight } from '../../utils/sunPosition';
+import { DF_CENTER } from '../../data/dfBounds';
 
 type Theme = 'light' | 'dark';
 
-const STORAGE_KEY = 'routewise-theme';
+// De quanto em quanto tempo reconfere sol x horário — não precisa de mais
+// que isso para escurecer "ao vivo" durante uma viagem ao anoitecer.
+const RECHECK_INTERVAL_MS = 60_000;
 
-function readInitialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark') {
-      return stored;
-    }
-  } catch {
-    // localStorage indisponível (modo privado, etc.) — segue com o padrão do sistema.
-  }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+function computeAutoTheme(coordinates: Coordinates | null): Theme {
+  return isNight(new Date(), coordinates ?? DF_CENTER) ? 'dark' : 'light';
 }
 
-export function useTheme(): { theme: Theme; toggleTheme: () => void } {
-  const [theme, setTheme] = useState<Theme>(readInitialTheme);
+// Segue o sol na coordenada atual (estilo Waze): sem GPS ainda, usa o
+// centro do DF como palpite. O botão de tema força uma escolha manual, mas
+// só para esta instância — sem persistência, a próxima abertura do app
+// volta a seguir o sol.
+export function useTheme(coordinates: Coordinates | null = null): {
+  theme: Theme;
+  toggleTheme: () => void;
+} {
+  const [autoTheme, setAutoTheme] = useState<Theme>(() => computeAutoTheme(coordinates));
+  const [manualOverride, setManualOverride] = useState<Theme | null>(null);
+
+  useEffect(() => {
+    setAutoTheme(computeAutoTheme(coordinates));
+    const id = setInterval(() => {
+      setAutoTheme(computeAutoTheme(coordinates));
+    }, RECHECK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [coordinates]);
+
+  const theme = manualOverride ?? autoTheme;
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    try {
-      localStorage.setItem(STORAGE_KEY, theme);
-    } catch {
-      // Sem persistência disponível — o tema continua funcionando só na sessão atual.
-    }
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
-  }, []);
+    setManualOverride(theme === 'dark' ? 'light' : 'dark');
+  }, [theme]);
 
   return { theme, toggleTheme };
 }

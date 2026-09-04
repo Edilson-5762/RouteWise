@@ -64,7 +64,7 @@ export function App() {
     isLoading: isRouteLoading,
     error: routeError,
   } = useRoute(dispatch);
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme(geolocation.position);
   const [placeName, setPlaceName] = useState<string | null>(restoredSnapshot?.placeName ?? null);
   const [chromeInsets, setChromeInsets] = useState<MapChromeInsets>({ top: 0, bottom: 0 });
   const [hasExitedApp, setHasExitedApp] = useState(false);
