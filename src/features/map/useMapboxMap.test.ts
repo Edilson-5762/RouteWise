@@ -617,6 +617,79 @@ describe('useMapboxMap', () => {
     expect(coordinates).toHaveLength(2);
   });
 
+  it('na navegação com velocidade, antecipa o ponto do veículo ao longo da rota (câmera/linha à frente da posição crua)', () => {
+    addSourceMock.mockClear();
+    const containerRef = createRef<HTMLDivElement>();
+    Object.defineProperty(containerRef, 'current', {
+      value: document.createElement('div'),
+      writable: true,
+    });
+
+    const origin = sampleRoute.geometry[0];
+
+    const { result } = renderHook(() =>
+      useMapboxMap({
+        containerRef,
+        origin,
+        destination: null,
+        route: sampleRoute,
+        isNavigating: true,
+        headingDegrees: null,
+        theme: 'light',
+        travelProfile: 'driving',
+        speedMetersPerSecond: 15,
+      }),
+    );
+
+    const [, config] = addSourceMock.mock.calls[0] as [
+      string,
+      { data: GeoJSON.Feature<GeoJSON.LineString> },
+    ];
+    const first = config.data.geometry.coordinates[0];
+    // O primeiro ponto da linha NÃO é mais a posição crua: foi empurrado alguns
+    // metros à frente ao longo da rota (dead-reckoning na velocidade medida).
+    expect(first).not.toEqual([origin.lng, origin.lat]);
+    // ...mas continua sobre a rota (entre o início e o fim dela).
+    expect(first[0]).toBeGreaterThan(sampleRoute.geometry[1].lng);
+    expect(first[0]).toBeLessThan(origin.lng);
+
+    // E a câmera de condução desliza (easing linear) o intervalo entre fixes.
+    expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
+      expect.objectContaining({ duration: 1150, easing: expect.any(Function) }),
+    );
+  });
+
+  it('parado (sem velocidade), a linha começa exatamente na posição do veículo, sem antecipar', () => {
+    addSourceMock.mockClear();
+    const containerRef = createRef<HTMLDivElement>();
+    Object.defineProperty(containerRef, 'current', {
+      value: document.createElement('div'),
+      writable: true,
+    });
+
+    const origin = sampleRoute.geometry[0];
+
+    renderHook(() =>
+      useMapboxMap({
+        containerRef,
+        origin,
+        destination: null,
+        route: sampleRoute,
+        isNavigating: true,
+        headingDegrees: null,
+        theme: 'light',
+        travelProfile: 'driving',
+        speedMetersPerSecond: 0,
+      }),
+    );
+
+    const [, config] = addSourceMock.mock.calls[0] as [
+      string,
+      { data: GeoJSON.Feature<GeoJSON.LineString> },
+    ];
+    expect(config.data.geometry.coordinates[0]).toEqual([origin.lng, origin.lat]);
+  });
+
   it('não duplica o ponto inicial quando a origem já coincide com o início da rota', () => {
     addSourceMock.mockClear();
     const containerRef = createRef<HTMLDivElement>();

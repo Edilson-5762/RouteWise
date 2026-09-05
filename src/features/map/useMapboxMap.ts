@@ -7,6 +7,8 @@ import { formatSpeedKmh } from '../../utils/format';
 import {
   haversineDistanceMeters,
   signedBearingDelta,
+  locateAlongRoute,
+  forwardBearingAlong,
   type RouteProjection,
 } from '../../utils/distance';
 import {
@@ -16,7 +18,14 @@ import {
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
-import { NAV_PUCK_VERTICAL_OFFSET_RATIO } from './navConstants';
+import {
+  NAV_PUCK_VERTICAL_OFFSET_RATIO,
+  NAV_CAMERA_LEAD_SECONDS,
+  NAV_CAMERA_LEAD_MAX_METERS,
+  NAV_CAMERA_LEAD_MIN_SPEED_MPS,
+  NAV_CAMERA_EASE_DURATION_MS,
+  NAV_BEARING_SAMPLE_METERS,
+} from './navConstants';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -42,10 +51,11 @@ const OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
 // só esta fração do caminho até a direção-alvo, então uma curva vira um giro
 // gradual em vez de um "tranco". Menor = mais suave (e mais lento pra reagir).
 const CAMERA_BEARING_SMOOTHING = 0.4;
-// Duração da animação da câmera a cada tick. Curta o bastante para o mapa
-// "alcançar" o ponto do veículo antes do próximo fix (senão a linha parece
-// ficar adiantada), longa o bastante para não dar tranco.
-const CAMERA_EASE_DURATION_MS = 450;
+// Curva de tempo LINEAR para o easeTo da câmera de condução: velocidade
+// constante o intervalo inteiro entre fixes (ver NAV_CAMERA_EASE_DURATION_MS),
+// em vez do "ease-in-out" padrão que desacelera no fim e faz o mapa parecer
+// congelar antes do próximo fix.
+const LINEAR_EASING = (t: number) => t;
 // Quantos segmentos por tick o progresso pode RECUAR para se recuperar de um
 // fix ruim de GPS (ver `lastRouteSegmentRef`).
 const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
@@ -186,6 +196,10 @@ export function useMapboxMap({
   // ao contrário do ref local abaixo) — âncora da janela de projeção.
   const routeProgressIndexRef = useRef(routeProgressIndex);
   routeProgressIndexRef.current = routeProgressIndex;
+  // Velocidade do GPS (m/s), lida via ref pela antecipação da câmera/linha
+  // (leadProjection) sem recriar callbacks a cada leitura.
+  const speedMetersPerSecondRef = useRef(speedMetersPerSecond);
+  speedMetersPerSecondRef.current = speedMetersPerSecond;
   const skipInitialStyleEffectRef = useRef(true);
   // Rastreia se o *estilo em si* (a folha de estilo carregada via
   // construtor/setStyle) já terminou de carregar — ao contrário de
@@ -245,6 +259,30 @@ export function useMapboxMap({
     );
     lastProjectionRef.current = projection;
     return projection;
+  }, []);
+
+  // "Antecipa" a projeção do veículo alguns metros À FRENTE ao longo da rota, na
+  // velocidade medida pelo GPS — assim a câmera e a linha representam onde o
+  // veículo ESTÁ AGORA (e não onde estava no último fix, ~1–2 s atrás), e
+  // entram na curva junto com o veículo real. Parado / devagar, devolve a
+  // projeção real sem mexer.
+  const leadProjection = useCallback((real: RouteProjection | null): RouteProjection | null => {
+    const currentRoute = routeRef.current;
+    if (!real || !currentRoute || currentRoute.geometry.length < 2) {
+      return real;
+    }
+    const speed = speedMetersPerSecondRef.current;
+    if (speed == null || speed < NAV_CAMERA_LEAD_MIN_SPEED_MPS) {
+      return real;
+    }
+    const leadMeters = Math.min(speed * NAV_CAMERA_LEAD_SECONDS, NAV_CAMERA_LEAD_MAX_METERS);
+    const loc = locateAlongRoute(currentRoute.geometry, real.alongMeters + leadMeters);
+    return {
+      distanceMeters: 0,
+      segmentIndex: loc.segmentIndex,
+      alongMeters: loc.alongMeters,
+      point: loc.point,
+    };
   }, []);
 
   useEffect(() => {
@@ -490,7 +528,7 @@ export function useMapboxMap({
     }
 
     const geojson = isNavigating
-      ? buildNavigationRouteGeojson(route, projectVehicle(originRef.current))
+      ? buildNavigationRouteGeojson(route, leadProjection(projectVehicle(originRef.current)))
       : buildRouteGeojson(route, originRef.current);
     const maneuverArrowGeojson = buildManeuverArrowGeojson(
       route,
@@ -611,7 +649,7 @@ export function useMapboxMap({
     // para reenquadrar a rota com o padding correto — sem isso, o primeiro
     // fitBounds usaria a altura antiga (0) e a rota nasceria atrás do
     // cartão mesmo assim.
-  }, [route, theme, isNavigating, chromeInsets, projectVehicle]);
+  }, [route, theme, isNavigating, chromeInsets, projectVehicle, leadProjection]);
 
   // Redesenha a linha da rota e a seta de manobra conforme o GPS atualiza, sem
   // repetir fitBounds/criação de camadas (que já rodaram no efeito acima) — só
@@ -624,8 +662,12 @@ export function useMapboxMap({
     }
     // Calculada aqui (uma vez por tick, sempre que navegando) para a câmera de
     // condução, que roda logo depois no mesmo commit, reaproveitar via
-    // `lastProjectionRef` — assim linha e câmera concordam no mesmo ponto.
-    const projection = isNavigating ? projectVehicle(origin) : null;
+    // `lastProjectionRef` — assim linha e câmera concordam no mesmo ponto (o
+    // ponto ANTECIPADO ao longo da rota, ver leadProjection).
+    const projection = isNavigating ? leadProjection(projectVehicle(origin)) : null;
+    if (isNavigating) {
+      lastProjectionRef.current = projection;
+    }
     const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (source) {
       source.setData(
@@ -639,7 +681,7 @@ export function useMapboxMap({
     if (arrowSource) {
       arrowSource.setData(buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex));
     }
-  }, [route, origin, isNavigating, currentStepIndex, projectVehicle]);
+  }, [route, origin, isNavigating, currentStepIndex, projectVehicle, leadProjection]);
 
   // Aplica a câmera de condução (visão "no capô"): centraliza no ponto do
   // veículo JÁ PROJETADO sobre a rota (o mesmo início da linha — ver
@@ -656,22 +698,27 @@ export function useMapboxMap({
       }
       lastCameraPositionRef.current = position;
 
-      // Projeção já calculada pelo efeito de redesenho da linha (roda antes
-      // deste, no mesmo commit); só recomputa se ainda não houver uma.
-      const projection = lastProjectionRef.current ?? projectVehicle(position);
+      // Projeção (ANTECIPADA ao longo da rota) já calculada pelo efeito de
+      // redesenho da linha (roda antes deste, no mesmo commit); só recomputa se
+      // ainda não houver uma.
+      const projection = lastProjectionRef.current ?? leadProjection(projectVehicle(position));
       const routeGeometry = routeRef.current?.geometry;
       const center = isNavigating && projection ? projection.point : position;
 
-      // Direção-alvo: navegando, a TANGENTE da rota no ponto do veículo (sempre
-      // definida, mesmo parado — evita a câmera "de lado" quando o GPS não dá
-      // heading). O heading do GPS só assume quando diverge muito da rota
-      // (usuário fora da pista). Sem rota: heading, senão direção de dois fixes.
+      // Direção-alvo: navegando, o RUMO À FRENTE na rota — a corda de ~25 m a
+      // partir do ponto do veículo (ver forwardBearingAlong), estável nas
+      // rotatórias, em vez do azimute do próximo par de vértices (que tremia e
+      // fazia a câmera girar em solavancos na curva). O heading do GPS só assume
+      // quando diverge muito da rota (usuário fora da pista). Sem rota: heading,
+      // senão direção de dois fixes.
       let targetBearing: number;
       if (isNavigating && projection && routeGeometry && routeGeometry.length >= 2) {
-        const routeBearing = bearingBetween(
-          routeGeometry[projection.segmentIndex],
-          routeGeometry[projection.segmentIndex + 1],
-        );
+        const routeBearing =
+          forwardBearingAlong(routeGeometry, projection.alongMeters, NAV_BEARING_SAMPLE_METERS) ??
+          bearingBetween(
+            routeGeometry[projection.segmentIndex],
+            routeGeometry[Math.min(projection.segmentIndex + 1, routeGeometry.length - 1)],
+          );
         targetBearing =
           headingDegrees != null &&
           Math.abs(signedBearingDelta(routeBearing, headingDegrees)) >
@@ -700,10 +747,11 @@ export function useMapboxMap({
         pitch: NAV_PITCH,
         bearing: smoothedBearing,
         offset: [0, offsetY],
-        duration: CAMERA_EASE_DURATION_MS,
+        duration: NAV_CAMERA_EASE_DURATION_MS,
+        easing: LINEAR_EASING,
       });
     },
-    [headingDegrees, containerRef, isNavigating, projectVehicle],
+    [headingDegrees, containerRef, isNavigating, projectVehicle, leadProjection],
   );
 
   useEffect(() => {

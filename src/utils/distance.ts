@@ -61,6 +61,76 @@ export function polylineLengthMeters(line: Coordinates[]): number {
   return total;
 }
 
+export interface AlongRouteLocation {
+  /** Ponto sobre a polilinha, a `alongMeters` do início. */
+  point: Coordinates;
+  /** Índice do segmento (i → i+1) em que o ponto caiu. */
+  segmentIndex: number;
+  /** A distância efetivamente usada, já fixada em [0, comprimento total]. */
+  alongMeters: number;
+}
+
+// Caminha `alongMeters` a partir do início da polilinha, segmento a segmento, e
+// devolve o ponto exato ali (interpolado no segmento) + o índice do segmento.
+// `alongMeters` é fixado em [0, comprimento total]. Usado para "antecipar" a
+// posição da câmera/linha da navegação alguns metros à frente do veículo, ao
+// longo da rota, na velocidade medida pelo GPS — ver `useMapboxMap`.
+export function locateAlongRoute(line: Coordinates[], alongMeters: number): AlongRouteLocation {
+  if (line.length === 0) {
+    return { point: { lat: 0, lng: 0 }, segmentIndex: 0, alongMeters: 0 };
+  }
+  if (line.length === 1) {
+    return { point: line[0], segmentIndex: 0, alongMeters: 0 };
+  }
+  const total = polylineLengthMeters(line);
+  const target = Math.max(0, Math.min(alongMeters, total));
+  let accumulated = 0;
+  for (let i = 0; i < line.length - 1; i++) {
+    const segLen = haversineDistanceMeters(line[i], line[i + 1]);
+    if (accumulated + segLen >= target || i === line.length - 2) {
+      const t = segLen === 0 ? 0 : Math.max(0, Math.min(1, (target - accumulated) / segLen));
+      return {
+        point: {
+          lat: line[i].lat + (line[i + 1].lat - line[i].lat) * t,
+          lng: line[i].lng + (line[i + 1].lng - line[i].lng) * t,
+        },
+        segmentIndex: i,
+        alongMeters: target,
+      };
+    }
+    accumulated += segLen;
+  }
+  const last = line.length - 1;
+  return { point: line[last], segmentIndex: last - 1, alongMeters: target };
+}
+
+// Azimute do "rumo à frente" a partir de um ponto sobre a rota: a corda entre
+// esse ponto e outro `sampleMeters` adiante ao longo da geometria. Uma corda
+// longa dá uma direção estável — sem o tremor de olhar só o próximo par de
+// vértices, que numa rotatória de geometria decimada faz a câmera girar em
+// solavancos. Perto do fim da rota (corda degenerada), cai no último segmento
+// com comprimento real.
+export function forwardBearingAlong(
+  line: Coordinates[],
+  alongMeters: number,
+  sampleMeters: number,
+): number | null {
+  if (line.length < 2) {
+    return null;
+  }
+  const from = locateAlongRoute(line, alongMeters);
+  const to = locateAlongRoute(line, alongMeters + sampleMeters);
+  if (haversineDistanceMeters(from.point, to.point) >= 0.5) {
+    return bearingBetween(from.point, to.point);
+  }
+  for (let i = line.length - 2; i >= 0; i--) {
+    if (haversineDistanceMeters(line[i], line[i + 1]) >= 0.5) {
+      return bearingBetween(line[i], line[i + 1]);
+    }
+  }
+  return null;
+}
+
 // Projeção de lat/lng para um plano local em metros (equirretangular) em torno
 // de `ref` — preciso o bastante para dezenas/centenas de metros e barato para
 // rodar a cada tick de GPS.
