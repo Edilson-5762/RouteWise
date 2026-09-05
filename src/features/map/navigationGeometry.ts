@@ -4,6 +4,7 @@ import {
   bearingBetween,
   findNearestPointIndex,
   haversineDistanceMeters,
+  locateAlongRoute,
   projectOntoRoute,
   type RouteProjection,
 } from '../../utils/distance';
@@ -14,11 +15,11 @@ import {
 export { bearingBetween };
 
 // Trecho da rota JÁ PERCORRIDO que a linha ainda desenha, atrás do ponto
-// projetado do veículo. Garante que a linha alcance o ícone fixo do veículo (e
-// passe um pouco dele) mesmo enquanto a câmera está terminando de rolar — sem
-// isso, a cada avanço a linha "sumia" a alguns metros à frente do veículo, e em
-// curvas some de vez até passar a curva.
-const NAV_LINE_BACKTRACK_METERS = 40;
+// projetado do veículo — só o suficiente para a linha encostar no ícone fixo do
+// carro, sem deixar "rastro" para trás. (Era 40 m, o que marcava um pedaço
+// grande da rua atrás do veículo; a linha não some mais nas curvas porque a
+// projeção agora não salta — ver janela estreita em projectVehicleOntoRoute.)
+const NAV_LINE_BACKTRACK_METERS = 6;
 
 // A seta da manobra só aparece quando o veículo está BEM em cima da curva.
 const MANEUVER_ARROW_VISIBLE_WITHIN_METERS = 55;
@@ -79,38 +80,14 @@ export function buildRouteGeojson(
   return lineFeature(coordinates);
 }
 
-// Caminha ao longo da geometria a partir de `fromIndex`, acumulando distância,
-// até somar ~`meters` (ou acabar a geometria). `direction` = +1 para frente,
-// -1 para trás. Devolve os vértices percorridos (sem o de `fromIndex`), do mais
-// próximo de `fromIndex` para o mais distante.
-function walkAlong(
-  geometry: Coordinates[],
-  fromIndex: number,
-  meters: number,
-  direction: 1 | -1,
-): Coordinates[] {
-  const points: Coordinates[] = [];
-  let accumulated = 0;
-  let i = fromIndex;
-  while (accumulated < meters) {
-    const next = i + direction;
-    if (next < 0 || next >= geometry.length) {
-      break;
-    }
-    accumulated += haversineDistanceMeters(geometry[i], geometry[next]);
-    points.push(geometry[next]);
-    i = next;
-  }
-  return points;
-}
-
 // Linha da rota para o MODO NAVEGAÇÃO. Recebe a PROJEÇÃO do veículo sobre a rota
 // (calculada pelo chamador com janela restrita ao progresso — ver
 // `useMapboxMap`). A linha:
-//  - começa um pouco ATRÁS do ponto projetado (NAV_LINE_BACKTRACK_METERS), para
-//    sempre alcançar o ícone fixo do veículo e não "sumir" nas curvas;
-//  - passa pelo ponto projetado (em cima da pista) e segue a geometria real da
-//    rua até o fim.
+//  - começa NAV_LINE_BACKTRACK_METERS atrás do ponto do veículo, seguindo a
+//    geometria real da rua (sem cortar em diagonal) — só o suficiente para a
+//    linha encostar no ícone fixo do carro, sem deixar rastro para trás;
+//  - passa pelo ponto do veículo (em cima da pista) e segue a geometria real
+//    da rua até o fim.
 export function buildNavigationRouteGeojson(
   route: Route,
   projection: RouteProjection | null,
@@ -120,18 +97,23 @@ export function buildNavigationRouteGeojson(
     return lineFeature(coordinates);
   }
 
-  const behind = walkAlong(route.geometry, projection.segmentIndex, NAV_LINE_BACKTRACK_METERS, -1)
-    .reverse()
-    .map((p) => [p.lng, p.lat] as [number, number]);
-
-  const cornerVertex: [number, number] = [
-    route.geometry[projection.segmentIndex].lng,
-    route.geometry[projection.segmentIndex].lat,
-  ];
   const snapped: [number, number] = [projection.point.lng, projection.point.lat];
   const ahead = coordinates.slice(projection.segmentIndex + 1);
 
-  const path = dedupeConsecutive([...behind, cornerVertex, snapped, ...ahead]);
+  // Cauda curta atrás do veículo: recua NAV_LINE_BACKTRACK_METERS ao longo da
+  // rota a partir do ponto projetado e inclui todos os vértices entre esse
+  // ponto e o veículo — assim a cauda acompanha a curva em vez de cortar reto
+  // de um vértice ao ponto projetado.
+  const tailStartMeters = Math.max(0, projection.alongMeters - NAV_LINE_BACKTRACK_METERS);
+  const tail = locateAlongRoute(route.geometry, tailStartMeters);
+  const behindVertices = coordinates.slice(tail.segmentIndex + 1, projection.segmentIndex + 1);
+
+  const path = dedupeConsecutive([
+    [tail.point.lng, tail.point.lat],
+    ...behindVertices,
+    snapped,
+    ...ahead,
+  ]);
   return lineFeature(path.length >= 2 ? path : [snapped, coordinates[coordinates.length - 1]]);
 }
 
@@ -213,17 +195,19 @@ export function buildManeuverArrowGeojson(
   };
 }
 
-// Projeção do veículo sobre a rota, restrita a uma janela em torno do progresso
-// registrado. `fromIndex` recua bastante (não só 3) para a projeção conseguir
-// "se recuperar" se um fix ruim de GPS tiver empurrado o progresso à frente —
-// senão a linha ficava permanentemente adiantada em relação ao veículo.
+// Projeção do veículo sobre a rota, restrita a uma janela ESTREITA em torno do
+// progresso registrado. Antes a janela ia de -15 a +60 segmentos: numa rotatória
+// (a rota passa rente a si mesma) um fix ruidoso "grudava" o ponto no outro lado
+// do anel, e a linha/câmera davam um salto que só se acertava depois da curva.
+// Com -6/+22 o ponto não tem para onde saltar; o `fromIndex` ainda recua o
+// bastante para se recuperar de um fix ruim, sem alcançar um trecho anterior.
 export function projectVehicleOntoRoute(
   route: Route,
   position: Coordinates,
   progressSegmentIndex: number,
 ): RouteProjection {
   return projectOntoRoute(position, route.geometry, {
-    fromIndex: progressSegmentIndex - 15,
-    toIndex: progressSegmentIndex + 60,
+    fromIndex: progressSegmentIndex - 6,
+    toIndex: progressSegmentIndex + 22,
   });
 }

@@ -6,6 +6,8 @@ import {
   signedBearingDelta,
   polylineLengthMeters,
   projectOntoRoute,
+  locateAlongRoute,
+  forwardBearingAlong,
 } from './distance';
 
 describe('haversineDistanceMeters', () => {
@@ -111,5 +113,80 @@ describe('projectOntoRoute', () => {
     const comJanela = projectOntoRoute(point, uTurn, { fromIndex: 0, toIndex: 1 });
     expect(comJanela.segmentIndex).toBe(0);
     expect(comJanela.distanceMeters).toBeGreaterThan(15);
+  });
+});
+
+describe('locateAlongRoute', () => {
+  // Linha reta indo para leste, ~111m entre vértices consecutivos.
+  const line = [
+    { lat: 0, lng: 0 },
+    { lat: 0, lng: 0.001 },
+    { lat: 0, lng: 0.002 },
+    { lat: 0, lng: 0.003 },
+  ];
+  const segLen = haversineDistanceMeters({ lat: 0, lng: 0 }, { lat: 0, lng: 0.001 });
+
+  it('no início da rota devolve o primeiro ponto', () => {
+    const loc = locateAlongRoute(line, 0);
+    expect(loc.point).toEqual({ lat: 0, lng: 0 });
+    expect(loc.segmentIndex).toBe(0);
+  });
+
+  it('interpola dentro do segmento na distância pedida', () => {
+    const loc = locateAlongRoute(line, segLen * 1.5);
+    expect(loc.segmentIndex).toBe(1);
+    expect(loc.point.lng).toBeCloseTo(0.0015, 6);
+    expect(loc.alongMeters).toBeCloseTo(segLen * 1.5, 1);
+  });
+
+  it('fixa no fim da rota quando a distância passa do comprimento total', () => {
+    const loc = locateAlongRoute(line, segLen * 99);
+    expect(loc.point).toEqual({ lat: 0, lng: 0.003 });
+    expect(loc.alongMeters).toBeCloseTo(segLen * 3, 1);
+  });
+
+  it('distância negativa cai no início', () => {
+    expect(locateAlongRoute(line, -50).point).toEqual({ lat: 0, lng: 0 });
+  });
+});
+
+describe('forwardBearingAlong', () => {
+  it('numa reta para leste, o rumo à frente é ~90°', () => {
+    const line = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: 0.002 },
+    ];
+    expect(forwardBearingAlong(line, 0, 50)).toBeCloseTo(90, 0);
+  });
+
+  it('a corda longa "corta" o bico da curva, dando um rumo entre os dois trechos', () => {
+    // Vai para o norte e depois vira para leste, curva em (0.001, 0).
+    const line = [
+      { lat: 0, lng: 0 },
+      { lat: 0.001, lng: 0 },
+      { lat: 0.001, lng: 0.001 },
+    ];
+    const nearCorner = polylineLengthMeters([
+      { lat: 0, lng: 0 },
+      { lat: 0.001, lng: 0 },
+    ]);
+    // Amostra longa o bastante para pegar os dois lados da curva → rumo ~45°.
+    const bearing = forwardBearingAlong(line, nearCorner - 20, 60);
+    expect(bearing).not.toBeNull();
+    expect(bearing!).toBeGreaterThan(20);
+    expect(bearing!).toBeLessThan(80);
+  });
+
+  it('perto do fim da rota, cai no último segmento real', () => {
+    const line = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+    ];
+    expect(forwardBearingAlong(line, 999, 50)).toBeCloseTo(90, 0);
+  });
+
+  it('linha degenerada devolve null', () => {
+    expect(forwardBearingAlong([{ lat: 0, lng: 0 }], 0, 50)).toBeNull();
   });
 });
