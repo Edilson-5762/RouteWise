@@ -1,12 +1,13 @@
 import type { Coordinates } from '../../types';
 import {
-  forwardBearingAlong,
+  travelBearingAlong,
   locateAlongRoute,
   signedBearingDelta,
   type RouteProjection,
 } from '../../utils/distance';
 import {
-  NAV_BEARING_SAMPLE_METERS,
+  NAV_BEARING_TRAIL_METERS,
+  NAV_BEARING_LOOKAHEAD_METERS,
   NAV_BEARING_SMOOTHING_PER_FRAME,
   NAV_DR_DECAY_SECONDS,
   NAV_DR_EXTRAPOLATE_SECONDS,
@@ -99,7 +100,12 @@ export function computeDriveStep(input: DriveStepInput): DriveStepOutput | null 
   const loc = locateAlongRoute(geometry, renderedAlong);
 
   const routeBearing =
-    forwardBearingAlong(geometry, renderedAlong, NAV_BEARING_SAMPLE_METERS) ??
+    travelBearingAlong(
+      geometry,
+      renderedAlong,
+      NAV_BEARING_TRAIL_METERS,
+      NAV_BEARING_LOOKAHEAD_METERS,
+    ) ??
     smoothedBearingDegrees ??
     headingDegrees ??
     0;

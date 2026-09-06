@@ -104,22 +104,25 @@ export function locateAlongRoute(line: Coordinates[], alongMeters: number): Alon
   return { point: line[last], segmentIndex: last - 1, alongMeters: target };
 }
 
-// Azimute do "rumo à frente" a partir de um ponto sobre a rota: a corda entre
-// esse ponto e outro `sampleMeters` adiante ao longo da geometria. Uma corda
-// longa dá uma direção estável — sem o tremor de olhar só o próximo par de
-// vértices, que numa rotatória de geometria decimada faz a câmera girar em
-// solavancos. Perto do fim da rota (corda degenerada), cai no último segmento
-// com comprimento real.
-export function forwardBearingAlong(
+// Azimute do "rumo de deslocamento" num ponto da rota: a corda de `backMeters`
+// ATRÁS do ponto até `aheadMeters` À FRENTE, ao longo da geometria. Com viés
+// para trás, o rumo mantém a direção da PERNA em que o veículo está e só gira ao
+// ATRAVESSAR o vértice — sem "cortar" uma curva fechada em "L" antes da hora
+// (uma corda só para a frente já apontava para a outra perna do L bem antes de
+// chegar na quina). Corda longa também tira o tremor da geometria decimada de
+// rotatória. Perto do fim/começo da rota (corda degenerada), cai no último
+// segmento com comprimento real.
+export function travelBearingAlong(
   line: Coordinates[],
   alongMeters: number,
-  sampleMeters: number,
+  backMeters: number,
+  aheadMeters: number,
 ): number | null {
   if (line.length < 2) {
     return null;
   }
-  const from = locateAlongRoute(line, alongMeters);
-  const to = locateAlongRoute(line, alongMeters + sampleMeters);
+  const from = locateAlongRoute(line, alongMeters - backMeters);
+  const to = locateAlongRoute(line, alongMeters + aheadMeters);
   if (haversineDistanceMeters(from.point, to.point) >= 0.5) {
     return bearingBetween(from.point, to.point);
   }
@@ -129,6 +132,16 @@ export function forwardBearingAlong(
     }
   }
   return null;
+}
+
+// Compat.: corda puramente para a frente (equivalente a travelBearingAlong com
+// backMeters = 0).
+export function forwardBearingAlong(
+  line: Coordinates[],
+  alongMeters: number,
+  sampleMeters: number,
+): number | null {
+  return travelBearingAlong(line, alongMeters, 0, sampleMeters);
 }
 
 // Projeção de lat/lng para um plano local em metros (equirretangular) em torno

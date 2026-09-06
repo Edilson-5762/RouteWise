@@ -8,6 +8,7 @@ import {
   projectOntoRoute,
   locateAlongRoute,
   forwardBearingAlong,
+  travelBearingAlong,
 } from './distance';
 
 describe('haversineDistanceMeters', () => {
@@ -188,5 +189,45 @@ describe('forwardBearingAlong', () => {
 
   it('linha degenerada devolve null', () => {
     expect(forwardBearingAlong([{ lat: 0, lng: 0 }], 0, 50)).toBeNull();
+  });
+});
+
+describe('travelBearingAlong', () => {
+  // Sobe para o norte (0→0.001 lat) e depois vira 90° para leste. Quina em
+  // (0.001, 0), ~111 m do início.
+  const elle = [
+    { lat: 0, lng: 0 },
+    { lat: 0.001, lng: 0 },
+    { lat: 0.001, lng: 0.001 },
+  ];
+  const corner = polylineLengthMeters([
+    { lat: 0, lng: 0 },
+    { lat: 0.001, lng: 0 },
+  ]);
+
+  it('a ~15 m ANTES da quina do "L", a corda com viés para trás ainda aponta ~norte (não corta a curva)', () => {
+    const b = travelBearingAlong(elle, corner - 15, 16, 4);
+    expect(b).not.toBeNull();
+    // Norte = 0°/360°. Com trás=16 (norte) e frente=4 (~na quina), fica quase norte.
+    expect(Math.min(b!, 360 - b!)).toBeLessThan(20);
+  });
+
+  it('JÁ na quina, a corda começa a girar (rumo entre norte e leste)', () => {
+    const b = travelBearingAlong(elle, corner + 2, 16, 4)!;
+    expect(b).toBeGreaterThan(15);
+    expect(b).toBeLessThan(85);
+  });
+
+  it('~16 m DEPOIS da quina, já aponta ~leste (curva concluída)', () => {
+    const b = travelBearingAlong(elle, corner + 16, 16, 4)!;
+    expect(b).toBeGreaterThan(80);
+    expect(b).toBeLessThan(100);
+  });
+
+  it('uma corda só para a frente (o comportamento antigo) cortaria a curva bem antes', () => {
+    // Mesmo ponto do 1º caso (15 m antes da quina), mas olhando 25 m à frente:
+    // já aponta bem virado para leste — é exatamente o "corte" que queríamos evitar.
+    const forward = travelBearingAlong(elle, corner - 15, 0, 25)!;
+    expect(forward).toBeGreaterThan(30);
   });
 });

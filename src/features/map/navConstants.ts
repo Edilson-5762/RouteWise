@@ -46,12 +46,20 @@ export const NAV_POSITION_SMOOTHING = 0.18;
 // assenta em ~0,5 s a 60 fps — curva vira giro gradual, sem tranco, e continua
 // assentando mesmo com o veículo parado (o laço rAF não para).
 export const NAV_BEARING_SMOOTHING_PER_FRAME = 0.09;
-// Comprimento (m) da corda usada para tirar o rumo "à frente" na rota — direção
-// estável nas rotatórias (ver forwardBearingAlong).
-export const NAV_BEARING_SAMPLE_METERS = 25;
+// Corda usada para tirar o rumo do veículo na rota (ver travelBearingAlong):
+// predominantemente PARA TRÁS, para o carro/câmera manterem a direção da perna
+// atual e só girarem ao atravessar o vértice — numa curva fechada em "L" o carro
+// acompanha até a ponta e só então vira, em vez de cortar a curva. O trecho à
+// frente (pequeno) tira o tremor perto do vértice. Total ~20 m = estável em
+// rotatória.
+export const NAV_BEARING_TRAIL_METERS = 16;
+export const NAV_BEARING_LOOKAHEAD_METERS = 4;
 // Se o heading do GPS diverge tanto assim do rumo da rota, o usuário
-// provavelmente saiu da pista — aí a câmera respeita o GPS.
-export const NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
+// provavelmente saiu da pista — aí a câmera respeita o GPS. Alto (100°, era 65)
+// para uma curva fechada legítima — em que o heading do GPS chega a girar 90° em
+// poucos metros — não fazer a câmera "pular" para o heading cru no meio da
+// curva. Só um retorno / entrada em contramão (135°+) troca a referência.
+export const NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 100;
 // Duração do easeTo pontual usado só na ENTRADA da navegação e no botão
 // "Centralizar" (o seguimento contínuo é o laço rAF, não este).
 export const NAV_CAMERA_ENTRY_EASE_MS = 600;

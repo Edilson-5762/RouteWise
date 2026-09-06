@@ -7,7 +7,7 @@ import { formatSpeedKmh } from '../../utils/format';
 import {
   haversineDistanceMeters,
   signedBearingDelta,
-  forwardBearingAlong,
+  travelBearingAlong,
   polylineLengthMeters,
   type RouteProjection,
 } from '../../utils/distance';
@@ -23,7 +23,8 @@ import {
   NAV_PUCK_VERTICAL_OFFSET_RATIO,
   NAV_DR_MIN_SPEED_MPS,
   NAV_DR_MAX_DERIVED_SPEED_MPS,
-  NAV_BEARING_SAMPLE_METERS,
+  NAV_BEARING_TRAIL_METERS,
+  NAV_BEARING_LOOKAHEAD_METERS,
   NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES,
   NAV_CAMERA_ENTRY_EASE_MS,
   NAV_CAMERA_APPLY_MIN_MS,
@@ -762,7 +763,12 @@ export function useMapboxMap({
       let targetBearing: number;
       if (isNavigating && projection && routeGeometry && routeGeometry.length >= 2) {
         const routeBearing =
-          forwardBearingAlong(routeGeometry, projection.alongMeters, NAV_BEARING_SAMPLE_METERS) ??
+          travelBearingAlong(
+            routeGeometry,
+            projection.alongMeters,
+            NAV_BEARING_TRAIL_METERS,
+            NAV_BEARING_LOOKAHEAD_METERS,
+          ) ??
           bearingBetween(
             routeGeometry[projection.segmentIndex],
             routeGeometry[Math.min(projection.segmentIndex + 1, routeGeometry.length - 1)],
