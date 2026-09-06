@@ -19,6 +19,14 @@ const ARRIVAL_ALONG_MAX_METERS = 120;
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
 
+// O painel de manobra e a voz medem a distância ATÉ a próxima manobra a partir
+// de um ponto ANTECIPADO ~1 s à frente na velocidade do GPS — igual ao carro do
+// desenho (dead-reckoning da câmera). Sem isso o painel/voz ficavam ~1 s /
+// dezenas de metros atrás do carro na tela. Só o painel/voz usam este ponto
+// antecipado; a detecção de desvio e de chegada seguem pela posição crua.
+const PANEL_LEAD_SECONDS = 1.1;
+const PANEL_LEAD_MAX_METERS = 35;
+
 const DEVIATION_THRESHOLD_METERS = 40;
 // Abaixo deste valor o app considera que o usuário reencontrou a rota e sai do
 // estado de desvio (parando o recálculo automático). É menor que o limite de
@@ -43,7 +51,7 @@ export type NavigationAction =
   | { type: 'ROUTE_RECALCULATED'; route: Route }
   | { type: 'ROUTE_DEVIATED' }
   | { type: 'START_NAVIGATION' }
-  | { type: 'POSITION_UPDATED'; position: Coordinates }
+  | { type: 'POSITION_UPDATED'; position: Coordinates; speedMetersPerSecond?: number | null }
   | { type: 'RESET' };
 
 export const initialNavigationState: NavigationState = {
@@ -140,15 +148,28 @@ export function navigationReducer(
       // comprimento difere um pouco de `route.distanceMeters`).
       const alongRouteMeters = progressFraction * state.route.distanceMeters;
 
+      // Ponto ANTECIPADO para o painel/voz (ver PANEL_LEAD_SECONDS): ~1 s à
+      // frente na velocidade medida, limitado. Parado (velocidade ~0) = sem
+      // antecipação, então o painel não "adianta" no semáforo.
+      const panelLeadMeters = Math.min(
+        Math.max(0, action.speedMetersPerSecond ?? 0) * PANEL_LEAD_SECONDS,
+        PANEL_LEAD_MAX_METERS,
+      );
+      const guidanceAlongMeters = Math.min(
+        alongRouteMeters + panelLeadMeters,
+        state.route.distanceMeters,
+      );
+
       // Passo atual pela distância JÁ PERCORRIDA ao longo da rota (não por uma
       // razão grosseira de índice de vértice, que fazia o banner/voz mudarem
       // muito antes da manobra). A manobra do passo i acontece no INÍCIO dele,
-      // então só avançamos para i+1 depois de passar do fim do passo i.
+      // então só avançamos para i+1 depois de passar do fim do passo i. Usa o
+      // ponto antecipado para o painel trocar de passo junto com o carro.
       let stepIndex = 0;
       let stepStartMeters = 0;
       for (let i = 0; i < steps.length - 1; i++) {
         stepStartMeters += steps[i].distanceMeters;
-        if (alongRouteMeters >= stepStartMeters) {
+        if (guidanceAlongMeters >= stepStartMeters) {
           stepIndex = i + 1;
         } else {
           break;
@@ -156,12 +177,13 @@ export function navigationReducer(
       }
       const currentStepIndex = Math.max(stepIndex, state.currentStepIndex);
 
-      // Metros que ainda faltam até a próxima manobra (fim do passo atual).
+      // Metros que ainda faltam até a próxima manobra (fim do passo atual),
+      // também a partir do ponto antecipado.
       let currentStepEndMeters = 0;
       for (let i = 0; i <= currentStepIndex && i < steps.length; i++) {
         currentStepEndMeters += steps[i].distanceMeters;
       }
-      const distanceToManeuverMeters = Math.max(0, currentStepEndMeters - alongRouteMeters);
+      const distanceToManeuverMeters = Math.max(0, currentStepEndMeters - guidanceAlongMeters);
 
       // Chegada: perto do pino, OU praticamente no fim da rota E de fato na
       // região do destino (esse segundo critério não exige que o GPS bata no

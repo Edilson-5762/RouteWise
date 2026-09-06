@@ -157,6 +157,54 @@ describe('navigationReducer', () => {
     expect(chegouEsquerda.arrivalSide).toBe('left');
   });
 
+  it('antecipa o painel com a velocidade: mesma posição, com velocidade a distância até a manobra é menor', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const parado = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 1.4 },
+      speedMetersPerSecond: 0,
+    });
+    const emMovimento = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 1.4 },
+      speedMetersPerSecond: 30,
+    });
+
+    // Mesma posição crua, mas o ponto antecipado ~1 s à frente encurta o que
+    // falta até a manobra (e faz o painel trocar de passo mais cedo).
+    expect(emMovimento.distanceToManeuverMeters).toBeLessThan(
+      parado.distanceToManeuverMeters as number,
+    );
+    // Antecipação limitada a PANEL_LEAD_MAX_METERS (35 m).
+    expect(
+      (parado.distanceToManeuverMeters as number) -
+        (emMovimento.distanceToManeuverMeters as number),
+    ).toBeLessThanOrEqual(35 + 0.01);
+  });
+
+  it('parado (velocidade 0) não antecipa — sem `speedMetersPerSecond` o comportamento é o de antes', () => {
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: sampleRoute,
+    });
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+    const semCampo = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 1.4 },
+    });
+    const zero = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 1.4 },
+      speedMetersPerSecond: 0,
+    });
+    expect(semCampo.distanceToManeuverMeters).toBe(zero.distanceToManeuverMeters);
+  });
+
   it('reporta distanceToManeuverMeters e ele diminui conforme você se aproxima da manobra', () => {
     const planned = navigationReducer(initialNavigationState, {
       type: 'ROUTE_PLANNED',

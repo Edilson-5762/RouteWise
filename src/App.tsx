@@ -100,9 +100,16 @@ export function App() {
 
   useEffect(() => {
     if (state.status === 'navigating' && geolocation.position) {
-      dispatch({ type: 'POSITION_UPDATED', position: geolocation.position });
+      dispatch({
+        type: 'POSITION_UPDATED',
+        position: geolocation.position,
+        // Alimenta a antecipação do painel/voz (ver navigationReducer): a
+        // distância até a manobra passa a ser medida de um ponto ~1 s à frente,
+        // igual ao carro do desenho — sem isso o painel ficava atrás dele.
+        speedMetersPerSecond: geolocation.speedMetersPerSecond,
+      });
     }
-  }, [geolocation.position, state.status]);
+  }, [geolocation.position, geolocation.speedMetersPerSecond, state.status]);
 
   // Plans the route once per destination selection — immediately if origin is
   // already known, or deferred until it arrives (covers picking a destination
