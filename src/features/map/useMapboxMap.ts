@@ -39,7 +39,11 @@ const ROUTE_SOURCE_ID = 'route-source';
 const ROUTE_CASING_LAYER_ID = 'route-casing-layer';
 const ROUTE_LAYER_ID = 'route-layer';
 const MANEUVER_ARROW_SOURCE_ID = 'maneuver-arrow-source';
-const MANEUVER_ARROW_LAYER_ID = 'maneuver-arrow-layer';
+// Linha branca no formato da curva (role: 'shape'), com contorno escuro por
+// baixo, + cabeça da seta na ponta (role: 'head') — tudo em cima da linha azul.
+const MANEUVER_ARROW_OUTLINE_LAYER_ID = 'maneuver-arrow-outline-layer';
+const MANEUVER_ARROW_SHAPE_LAYER_ID = 'maneuver-arrow-shape-layer';
+const MANEUVER_ARROW_HEAD_LAYER_ID = 'maneuver-arrow-head-layer';
 const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
 const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
@@ -67,6 +71,7 @@ interface UseMapboxMapOptions {
   isNavigating: boolean;
   currentStepIndex?: number;
   routeProgressIndex?: number;
+  distanceToManeuverMeters?: number | null;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -153,6 +158,7 @@ export function useMapboxMap({
   isNavigating,
   currentStepIndex = 0,
   routeProgressIndex = 0,
+  distanceToManeuverMeters = null,
   headingDegrees,
   theme,
   travelProfile,
@@ -188,6 +194,8 @@ export function useMapboxMap({
   // atualizações a cada tick são responsabilidade do efeito dedicado abaixo.
   const currentStepIndexRef = useRef(currentStepIndex);
   currentStepIndexRef.current = currentStepIndex;
+  const distanceToManeuverMetersRef = useRef(distanceToManeuverMeters);
+  distanceToManeuverMetersRef.current = distanceToManeuverMeters;
   // Progresso ao longo da rota vindo do estado (sobrevive a um remount do mapa,
   // ao contrário do ref local abaixo) — âncora da janela de projeção.
   const routeProgressIndexRef = useRef(routeProgressIndex);
@@ -553,8 +561,14 @@ export function useMapboxMap({
     if (!route) {
       lastRouteFitRef.current = null;
       const clearRoute = () => {
-        if (map.getLayer(MANEUVER_ARROW_LAYER_ID)) {
-          map.removeLayer(MANEUVER_ARROW_LAYER_ID);
+        for (const id of [
+          MANEUVER_ARROW_HEAD_LAYER_ID,
+          MANEUVER_ARROW_SHAPE_LAYER_ID,
+          MANEUVER_ARROW_OUTLINE_LAYER_ID,
+        ]) {
+          if (map.getLayer(id)) {
+            map.removeLayer(id);
+          }
         }
         if (map.getSource(MANEUVER_ARROW_SOURCE_ID)) {
           map.removeSource(MANEUVER_ARROW_SOURCE_ID);
@@ -586,9 +600,10 @@ export function useMapboxMap({
       : buildRouteGeojson(route, originRef.current);
     const maneuverArrowGeojson = buildManeuverArrowGeojson(
       route,
-      originRef.current,
       isNavigating,
       currentStepIndexRef.current,
+      distanceToManeuverMetersRef.current,
+      originRef.current,
     );
 
     const applyRoute = () => {
@@ -634,19 +649,44 @@ export function useMapboxMap({
           type: 'geojson',
           data: maneuverArrowGeojson,
         });
-        // UMA seta de curva ("↰"/"↱"/"↑"), num único ponto EM CIMA da manobra,
-        // girada para a direção de chegada na curva — a ponta indica o lado.
-        // `buildManeuverArrowGeojson` só devolve a feature quando o veículo já
-        // está bem perto da manobra, então ela aparece "na hora da curva" e some
-        // logo depois.
+        // Contorno azul-escuro por baixo da seta branca: destaca a seta contra
+        // o contorno branco da própria rota (senão branco-no-branco some).
         map.addLayer({
-          id: MANEUVER_ARROW_LAYER_ID,
+          id: MANEUVER_ARROW_OUTLINE_LAYER_ID,
+          type: 'line',
+          source: MANEUVER_ARROW_SOURCE_ID,
+          filter: ['==', ['get', 'role'], 'shape'],
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': '#172554',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 8, 18, 20, 22, 26],
+            'line-opacity': 0.9,
+          },
+        });
+        // Seta BRANCA no formato exato da curva/rotatória/desvio, POR CIMA da
+        // linha azul da rota — traça a geometria real da manobra (ver
+        // buildManeuverArrowGeojson) e aparece já a ~150 m dela.
+        map.addLayer({
+          id: MANEUVER_ARROW_SHAPE_LAYER_ID,
+          type: 'line',
+          source: MANEUVER_ARROW_SOURCE_ID,
+          filter: ['==', ['get', 'role'], 'shape'],
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 12, 22, 16],
+          },
+        });
+        // Cabeça da seta na ponta (direção de saída da curva).
+        map.addLayer({
+          id: MANEUVER_ARROW_HEAD_LAYER_ID,
           type: 'symbol',
           source: MANEUVER_ARROW_SOURCE_ID,
+          filter: ['==', ['get', 'role'], 'head'],
           layout: {
-            'text-field': ['get', 'glyph'],
+            'text-field': '▲',
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-            'text-size': 34,
+            'text-size': ['interpolate', ['linear'], ['zoom'], 12, 20, 18, 40, 22, 52],
             'text-rotate': ['get', 'bearing'],
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'map',
@@ -655,7 +695,7 @@ export function useMapboxMap({
           },
           paint: {
             'text-color': '#ffffff',
-            'text-halo-color': '#1d4ed8',
+            'text-halo-color': '#172554',
             'text-halo-width': 2.5,
           },
         });
@@ -733,9 +773,25 @@ export function useMapboxMap({
     const arrowSource = map.getSource(MANEUVER_ARROW_SOURCE_ID) as
       mapboxgl.GeoJSONSource | undefined;
     if (arrowSource) {
-      arrowSource.setData(buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex));
+      arrowSource.setData(
+        buildManeuverArrowGeojson(
+          route,
+          isNavigating,
+          currentStepIndex,
+          distanceToManeuverMeters,
+          origin,
+        ),
+      );
     }
-  }, [route, origin, isNavigating, currentStepIndex, projectVehicle, updateDriveAnchor]);
+  }, [
+    route,
+    origin,
+    isNavigating,
+    currentStepIndex,
+    distanceToManeuverMeters,
+    projectVehicle,
+    updateDriveAnchor,
+  ]);
 
   // Comprimento total da geometria da rota — cacheado por rota (o laço rAF
   // precisa dele a cada quadro para fixar o avanço no fim da rota).
