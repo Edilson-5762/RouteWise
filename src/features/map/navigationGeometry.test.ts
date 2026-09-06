@@ -137,33 +137,65 @@ describe('buildManeuverArrowGeojson', () => {
   };
 
   it('não desenha nada quando não há manobra à frente (último passo)', () => {
-    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0, lng: 0 }, true, 1);
+    const fc = buildManeuverArrowGeojson(turningRoute, true, 1, 10);
     expect(fc.features).toHaveLength(0);
   });
 
-  it('não desenha nada enquanto a manobra não está BEM perto (some longe da curva)', () => {
-    // ~220 m antes da esquina — além do limite curto de visibilidade.
-    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0, lng: 0 }, true, 0);
+  it('não desenha nada enquanto a manobra ainda está longe (> ~150 m)', () => {
+    const fc = buildManeuverArrowGeojson(turningRoute, true, 0, 220);
     expect(fc.features).toHaveLength(0);
   });
 
-  it('desenha UMA seta (Point) em cima da curva ao chegar bem perto, com glifo do lado e azimute de chegada', () => {
-    // ~22 m antes da esquina (lat 0.0018 → manobra em lat 0.002).
-    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0.0018, lng: 0 }, true, 0);
-    expect(fc.features).toHaveLength(1);
-    const feature = fc.features[0];
-    expect(feature.geometry.type).toBe('Point');
-    // No ponto exato da manobra.
-    expect(feature.geometry.coordinates).toEqual([0, 0.002]);
-    // Curva à direita → glifo "↱".
-    expect(feature.properties?.glyph).toBe('↱');
-    // Chegada vinda do sul (rumo norte) → azimute ~0°.
-    expect(feature.properties?.bearing).toBeCloseTo(0, 0);
+  it('ao entrar na faixa de visibilidade, desenha a LINHA no formato da curva + a CABEÇA na ponta', () => {
+    const fc = buildManeuverArrowGeojson(turningRoute, true, 0, 40);
+    expect(fc.features).toHaveLength(2);
+
+    const shape = fc.features.find((f) => f.properties?.role === 'shape');
+    const head = fc.features.find((f) => f.properties?.role === 'head');
+    expect(shape).toBeDefined();
+    expect(head).toBeDefined();
+
+    // A linha traça a geometria real: passa pela quina (0, 0.002) e tem um
+    // ponto ANTES (mais ao sul) e um DEPOIS (mais a leste).
+    expect(shape!.geometry.type).toBe('LineString');
+    const coords = (shape!.geometry as unknown as { coordinates: [number, number][] }).coordinates;
+    expect(coords.length).toBeGreaterThanOrEqual(3);
+    expect(coords.some(([lng, lat]) => Math.abs(lng) < 1e-9 && Math.abs(lat - 0.002) < 1e-9)).toBe(
+      true,
+    );
+    expect(coords[0][1]).toBeLessThan(0.002); // começa antes da quina (ao sul)
+    expect(coords[coords.length - 1][0]).toBeGreaterThan(0); // termina depois (a leste)
+
+    // A cabeça fica na ponta e aponta para a SAÍDA da curva (~leste = 90°).
+    expect(head!.geometry.type).toBe('Point');
+    expect((head!.properties as { bearing: number }).bearing).toBeCloseTo(90, 0);
+  });
+
+  it('não desenha para manobra de seguir reto (continue / sem curva)', () => {
+    const straightRoute: Route = {
+      ...turningRoute,
+      steps: [
+        turningRoute.steps[0],
+        { ...turningRoute.steps[1], maneuverType: 'continue', maneuverModifier: 'straight' },
+      ],
+    };
+    expect(buildManeuverArrowGeojson(straightRoute, true, 0, 40).features).toHaveLength(0);
   });
 
   it('nada fora da navegação', () => {
-    const fc = buildManeuverArrowGeojson(turningRoute, { lat: 0.0018, lng: 0 }, false, 0);
-    expect(fc.features).toHaveLength(0);
+    expect(buildManeuverArrowGeojson(turningRoute, false, 0, 40).features).toHaveLength(0);
+  });
+
+  it('sem distanceToManeuverMeters, cai na distância crua da posição informada', () => {
+    // Longe: nada.
+    expect(
+      buildManeuverArrowGeojson(turningRoute, true, 0, null, { lat: 0, lng: 0 }).features,
+    ).toHaveLength(0);
+    // Perto (~30 m antes da quina): desenha.
+    expect(
+      buildManeuverArrowGeojson(turningRoute, true, 0, null, { lat: 0.00173, lng: 0 }).features
+        .length,
+    ).toBeGreaterThan(0);
   });
 });
 

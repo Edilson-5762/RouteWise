@@ -5,6 +5,7 @@ import {
   findNearestPointIndex,
   haversineDistanceMeters,
   locateAlongRoute,
+  polylineLengthMeters,
   projectOntoRoute,
   type RouteProjection,
 } from '../../utils/distance';
@@ -21,11 +22,52 @@ export { bearingBetween };
 // projeção agora não salta — ver janela estreita em projectVehicleOntoRoute.)
 const NAV_LINE_BACKTRACK_METERS = 6;
 
-// A seta da manobra só aparece quando o veículo está BEM em cima da curva.
-const MANEUVER_ARROW_VISIBLE_WITHIN_METERS = 55;
+// A seta de manobra (linha branca + ponta) sobre a linha azul aparece já a esta
+// distância da manobra e acompanha até passar dela — reforça "vire por aqui".
+const MANEUVER_ARROW_VISIBLE_WITHIN_METERS = 150;
+// Quanto da rota, ANTES e DEPOIS do ponto da manobra, a linha branca cobre — é o
+// que dá a ela o "formato da curva".
+const MANEUVER_ARROW_LEAD_IN_METERS = 34;
+const MANEUVER_ARROW_LEAD_OUT_METERS = 26;
+// Depois que a manobra ficou este tanto para trás, a seta some.
+const MANEUVER_ARROW_HIDE_PAST_METERS = 22;
+// Recuo, a partir da ponta, para tirar o azimute da PONTA da seta (direção de
+// saída da curva).
+const MANEUVER_ARROW_HEAD_BEARING_BACK_METERS = 8;
 // Distância mínima de segmento para tirar um azimute confiável (evita ruído de
 // vértices coincidentes).
 const MIN_SEGMENT_METERS_FOR_BEARING = 3;
+
+// Tipos de manobra que ganham a seta branca em cima da linha: curvas,
+// rotatórias, bifurcações, entradas/saídas de via — ou seja, tudo que faz o
+// condutor mudar de direção. Seguir reto / partir / chegar não ganham.
+const ARROW_TURNING_MANEUVER_TYPES = new Set([
+  'turn',
+  'roundabout',
+  'rotary',
+  'roundabout turn',
+  'exit roundabout',
+  'exit rotary',
+  'fork',
+  'merge',
+  'on ramp',
+  'off ramp',
+  'end of road',
+]);
+
+function isTurningManeuver(maneuverType: string, maneuverModifier: string | null): boolean {
+  const type = (maneuverType ?? '').toLowerCase();
+  if (ARROW_TURNING_MANEUVER_TYPES.has(type)) {
+    return true;
+  }
+  // "continue"/"new name"/"notification" só contam quando trazem um modificador
+  // de curva de verdade (ex.: "slight left") — reto não.
+  if (type === 'continue' || type === 'new name' || type === 'notification') {
+    const modifier = (maneuverModifier ?? '').toLowerCase();
+    return modifier !== '' && modifier !== 'straight';
+  }
+  return false;
+}
 
 // ~1 cm — dedup de pontos praticamente coincidentes.
 const COINCIDENT_EPSILON_DEGREES = 1e-7;
@@ -38,7 +80,7 @@ function lineFeature(coordinates: [number, number][]): Feature<LineString> {
   };
 }
 
-const EMPTY_POINT_COLLECTION: FeatureCollection<Point> = {
+const EMPTY_POINT_COLLECTION: FeatureCollection = {
   type: 'FeatureCollection',
   features: [],
 };
@@ -137,62 +179,89 @@ function segmentBearingAround(geometry: Coordinates[], index: number, direction:
     : bearingBetween(geometry[fallback], geometry[index]);
 }
 
-function turnGlyphFor(modifier: string | null): string {
-  const m = (modifier ?? '').toLowerCase();
-  if (m.includes('left')) return m.includes('u') ? '⮌' : '↰';
-  if (m.includes('right')) return '↱';
-  if (m === 'uturn') return '⮌';
-  return '↑';
-}
-
-// UMA seta em cima da curva, apontando para onde virar — aparece só quando o
-// veículo já está BEM perto da manobra (MANEUVER_ARROW_VISIBLE_WITHIN_METERS) e
-// some assim que o passo avança. É um Point; a camada de símbolos (ver
-// `useMapboxMap`) desenha um único glifo de curva girado para a direção de
-// CHEGADA na manobra (`bearing`), então "↰"/"↱" ficam alinhados com a rua em
-// que o veículo está e a ponta indica o lado.
+// Seta branca EM CIMA da linha azul, no formato da curva/rotatória/desvio: uma
+// LineString que traça a geometria real da rota de MANEUVER_ARROW_LEAD_IN_METERS
+// antes da manobra até MANEUVER_ARROW_LEAD_OUT_METERS depois (role: 'shape'),
+// mais um Point na ponta com o azimute de SAÍDA para a cabeça da seta
+// (role: 'head'). Aparece já a MANEUVER_ARROW_VISIBLE_WITHIN_METERS da manobra e
+// some quando ela passou. `distanceToManeuverMeters` vem do estado (já
+// antecipado — ver navigationReducer); sem ele, cai na distância crua.
 export function buildManeuverArrowGeojson(
   route: Route | null,
-  currentPosition: Coordinates | null,
   isNavigating: boolean,
   currentStepIndex: number,
-): FeatureCollection<Point> {
-  if (!route || !isNavigating || !currentPosition || route.geometry.length < 2) {
+  distanceToManeuverMeters: number | null,
+  currentPosition?: Coordinates | null,
+): FeatureCollection {
+  if (!route || !isNavigating || route.geometry.length < 2) {
     return EMPTY_POINT_COLLECTION;
   }
 
   // A manobra do passo `i` acontece no INÍCIO dele; enquanto se percorre o
   // passo `currentStepIndex`, a PRÓXIMA manobra é a do passo seguinte.
   const upcoming = route.steps[currentStepIndex + 1];
-  if (!upcoming) {
+  if (!upcoming || !isTurningManeuver(upcoming.maneuverType, upcoming.maneuverModifier)) {
     return EMPTY_POINT_COLLECTION;
   }
 
-  const distanceToManeuver = haversineDistanceMeters(currentPosition, upcoming.maneuverLocation);
+  const distanceToManeuver =
+    distanceToManeuverMeters ??
+    (currentPosition
+      ? haversineDistanceMeters(currentPosition, upcoming.maneuverLocation)
+      : Number.POSITIVE_INFINITY);
   if (distanceToManeuver > MANEUVER_ARROW_VISIBLE_WITHIN_METERS) {
     return EMPTY_POINT_COLLECTION;
   }
 
   const cornerIndex = findNearestPointIndex(upcoming.maneuverLocation, route.geometry);
-  // Azimute de CHEGADA na curva (direção da rua antes de virar).
-  const bearing = segmentBearingAround(route.geometry, cornerIndex, -1);
+  const cornerAlong = polylineLengthMeters(route.geometry.slice(0, cornerIndex + 1));
 
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: {
-          bearing,
-          glyph: turnGlyphFor(upcoming.maneuverModifier),
-        },
-        geometry: {
-          type: 'Point',
-          coordinates: [upcoming.maneuverLocation.lng, upcoming.maneuverLocation.lat],
-        },
-      },
-    ],
+  const startLoc = locateAlongRoute(route.geometry, cornerAlong - MANEUVER_ARROW_LEAD_IN_METERS);
+  const endLoc = locateAlongRoute(route.geometry, cornerAlong + MANEUVER_ARROW_LEAD_OUT_METERS);
+
+  // A manobra já ficou para trás — some.
+  if (startLoc.alongMeters >= cornerAlong && endLoc.alongMeters <= cornerAlong) {
+    return EMPTY_POINT_COLLECTION;
+  }
+  const routeLength = polylineLengthMeters(route.geometry);
+  if (cornerAlong + MANEUVER_ARROW_HIDE_PAST_METERS < 0 || cornerAlong > routeLength) {
+    return EMPTY_POINT_COLLECTION;
+  }
+
+  const coordinates: [number, number][] = route.geometry.map((p) => [p.lng, p.lat]);
+  const midVertices = coordinates.slice(startLoc.segmentIndex + 1, endLoc.segmentIndex + 1);
+  const shape = dedupeConsecutive([
+    [startLoc.point.lng, startLoc.point.lat],
+    ...midVertices,
+    [endLoc.point.lng, endLoc.point.lat],
+  ]);
+  if (shape.length < 2) {
+    return EMPTY_POINT_COLLECTION;
+  }
+
+  // Azimute da PONTA da seta = direção de saída da curva (de um pouco antes da
+  // ponta até a ponta).
+  const headTailLoc = locateAlongRoute(
+    route.geometry,
+    endLoc.alongMeters - MANEUVER_ARROW_HEAD_BEARING_BACK_METERS,
+  );
+  const headBearing =
+    haversineDistanceMeters(headTailLoc.point, endLoc.point) >= MIN_SEGMENT_METERS_FOR_BEARING
+      ? bearingBetween(headTailLoc.point, endLoc.point)
+      : segmentBearingAround(route.geometry, cornerIndex, 1);
+
+  const shapeFeature: Feature<LineString> = {
+    type: 'Feature',
+    properties: { role: 'shape' },
+    geometry: { type: 'LineString', coordinates: shape },
   };
+  const headFeature: Feature<Point> = {
+    type: 'Feature',
+    properties: { role: 'head', bearing: headBearing },
+    geometry: { type: 'Point', coordinates: [endLoc.point.lng, endLoc.point.lat] },
+  };
+
+  return { type: 'FeatureCollection', features: [shapeFeature, headFeature] };
 }
 
 // Projeção do veículo sobre a rota, restrita a uma janela ESTREITA em torno do

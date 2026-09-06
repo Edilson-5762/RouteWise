@@ -221,6 +221,7 @@ export function App() {
           isNavigating={state.status === 'navigating'}
           currentStepIndex={state.currentStepIndex}
           routeProgressIndex={state.routeProgressIndex}
+          distanceToManeuverMeters={state.distanceToManeuverMeters}
           headingDegrees={geolocation.headingDegrees}
           theme={theme}
           travelProfile={state.travelProfile}
