@@ -18,26 +18,28 @@ export function ManeuverBanner({ guidance }: ManeuverBannerProps) {
   const Icon = getManeuverIcon(guidance.maneuverType, guidance.maneuverModifier);
 
   return (
-    <div className="mx-2 overflow-hidden rounded-b-2xl bg-maneuver text-maneuver-foreground shadow-xl">
-      <div className="flex items-center gap-4 px-4 py-3">
+    <div className="mx-2 overflow-hidden rounded-b-3xl bg-maneuver text-maneuver-foreground shadow-xl">
+      {/* Altura ~2x a original (spec do usuário): py maior, ícone e textos
+          maiores. A largura (mx-2) segue igual. */}
+      <div className="flex items-center gap-5 px-5 py-7">
         <div className="shrink-0">
           {isRoundabout ? (
             <RoundaboutDiagram
               degrees={guidance.roundaboutDegrees}
               exitNumber={guidance.roundaboutExit}
-              size={48}
+              size={76}
             />
           ) : (
-            <Icon size={44} />
+            <Icon size={72} />
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-2xl font-bold leading-tight">
+          <p className="text-4xl font-bold leading-tight">
             {formatDistance(guidance.distanceMeters ?? 0)}
           </p>
-          <p className="line-clamp-2 text-lg font-semibold leading-snug">{guidance.primaryText}</p>
+          <p className="line-clamp-2 text-2xl font-semibold leading-snug">{guidance.primaryText}</p>
           {guidance.secondaryText && (
-            <p className="truncate text-sm opacity-70">{guidance.secondaryText}</p>
+            <p className="truncate text-base opacity-70">{guidance.secondaryText}</p>
           )}
         </div>
       </div>
