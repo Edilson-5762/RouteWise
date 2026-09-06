@@ -28,8 +28,11 @@ const MIN_POSITION_DEADBAND_METERS = 3;
 // que no celular vai de 20m a (num fix de rede) 2000m — como limite de
 // movimento, então qualquer deslocamento menor que essa margem era descartado
 // como ruído e o puck/câmera congelavam. Com o teto, uma leitura imprecisa não
-// consegue mais travar o rastreamento.
-const MAX_POSITION_DEADBAND_METERS = 25;
+// consegue mais travar o rastreamento. 12m (era 25): em velocidade baixa, com
+// `coords.speed` ausente/ruim (comum no polling), 25m fazia a posição só
+// atualizar a cada 25m percorridos — o veículo do desenho "chegava atrasado" na
+// curva. 12m ainda filtra o tremor de GPS parado (tipicamente < 8m).
+const MAX_POSITION_DEADBAND_METERS = 12;
 // Acima disto o próprio GPS está dizendo que o aparelho se move — nesse caso a
 // leitura é aceita na hora, sem passar pelo filtro de ruído (~2,5 km/h).
 const MOVING_SPEED_THRESHOLD_MPS = 0.7;

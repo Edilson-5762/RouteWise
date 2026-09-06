@@ -66,6 +66,7 @@ vi.mock('mapbox-gl', () => {
     fitBounds = fitBoundsMock;
     setStyle = vi.fn();
     easeTo = vi.fn();
+    jumpTo = vi.fn();
     getBearing = vi.fn().mockReturnValue(0);
   }
   class FakeMarker {
@@ -617,77 +618,38 @@ describe('useMapboxMap', () => {
     expect(coordinates).toHaveLength(2);
   });
 
-  it('na navegação com velocidade, antecipa o ponto do veículo ao longo da rota (câmera/linha à frente da posição crua)', () => {
-    addSourceMock.mockClear();
+  it('ao ENTRAR na navegação, a câmera dá um easeTo pontual com padding.top (trava o carro na vertical, sem offset que roda na curva)', () => {
     const containerRef = createRef<HTMLDivElement>();
-    Object.defineProperty(containerRef, 'current', {
-      value: document.createElement('div'),
-      writable: true,
-    });
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientHeight', { value: 800, configurable: true });
+    Object.defineProperty(containerRef, 'current', { value: el, writable: true });
 
-    const origin = sampleRoute.geometry[0];
-
-    const { result } = renderHook(() =>
-      useMapboxMap({
-        containerRef,
-        origin,
-        destination: null,
-        route: sampleRoute,
-        isNavigating: true,
-        headingDegrees: null,
-        theme: 'light',
-        travelProfile: 'driving',
-        speedMetersPerSecond: 15,
-      }),
+    const { result, rerender } = renderHook(
+      (props: { isNavigating: boolean }) =>
+        useMapboxMap({
+          containerRef,
+          origin: sampleRoute.geometry[0],
+          destination: null,
+          route: sampleRoute,
+          headingDegrees: 90,
+          theme: 'light',
+          travelProfile: 'driving',
+          speedMetersPerSecond: null,
+          ...props,
+        }),
+      { initialProps: { isNavigating: false } },
     );
 
-    const [, config] = addSourceMock.mock.calls[0] as [
-      string,
-      { data: GeoJSON.Feature<GeoJSON.LineString> },
-    ];
-    const first = config.data.geometry.coordinates[0];
-    // O primeiro ponto da linha NÃO é mais a posição crua: foi empurrado alguns
-    // metros à frente ao longo da rota (dead-reckoning na velocidade medida).
-    expect(first).not.toEqual([origin.lng, origin.lat]);
-    // ...mas continua sobre a rota (entre o início e o fim dela).
-    expect(first[0]).toBeGreaterThan(sampleRoute.geometry[1].lng);
-    expect(first[0]).toBeLessThan(origin.lng);
+    rerender({ isNavigating: true });
 
-    // E a câmera de condução desliza (easing linear) o intervalo entre fixes.
     expect(result.current.mapRef.current?.easeTo).toHaveBeenCalledWith(
-      expect.objectContaining({ duration: 1150, easing: expect.any(Function) }),
-    );
-  });
-
-  it('parado (sem velocidade), a linha começa exatamente na posição do veículo, sem antecipar', () => {
-    addSourceMock.mockClear();
-    const containerRef = createRef<HTMLDivElement>();
-    Object.defineProperty(containerRef, 'current', {
-      value: document.createElement('div'),
-      writable: true,
-    });
-
-    const origin = sampleRoute.geometry[0];
-
-    renderHook(() =>
-      useMapboxMap({
-        containerRef,
-        origin,
-        destination: null,
-        route: sampleRoute,
-        isNavigating: true,
-        headingDegrees: null,
-        theme: 'light',
-        travelProfile: 'driving',
-        speedMetersPerSecond: 0,
+      expect.objectContaining({
+        pitch: 60,
+        zoom: 19,
+        // padding.top = 2 * 0.3 * 800 = 480 → centro a 80% da altura.
+        padding: { top: 480, bottom: 0, left: 0, right: 0 },
       }),
     );
-
-    const [, config] = addSourceMock.mock.calls[0] as [
-      string,
-      { data: GeoJSON.Feature<GeoJSON.LineString> },
-    ];
-    expect(config.data.geometry.coordinates[0]).toEqual([origin.lng, origin.lat]);
   });
 
   it('não duplica o ponto inicial quando a origem já coincide com o início da rota', () => {

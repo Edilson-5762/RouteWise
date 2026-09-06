@@ -35,6 +35,7 @@ vi.mock('mapbox-gl', () => {
     fitBounds = vi.fn();
     setStyle = vi.fn();
     easeTo = vi.fn();
+    jumpTo = vi.fn();
     getBearing = vi.fn().mockReturnValue(0);
     getCenter = vi.fn().mockReturnValue({ lat: -15.8267, lng: -48.0654 });
     getZoom = vi.fn().mockReturnValue(16);
