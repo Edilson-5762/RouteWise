@@ -8,7 +8,9 @@ import {
 import {
   NAV_BEARING_SAMPLE_METERS,
   NAV_BEARING_SMOOTHING_PER_FRAME,
-  NAV_DR_MAX_SECONDS,
+  NAV_DR_DECAY_SECONDS,
+  NAV_DR_EXTRAPOLATE_SECONDS,
+  NAV_DR_MAX_CREEP_METERS,
   NAV_DR_MIN_SPEED_MPS,
   NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES,
   NAV_POSITION_SMOOTHING,
@@ -65,10 +67,22 @@ export function computeDriveStep(input: DriveStepInput): DriveStepOutput | null 
     return null;
   }
 
-  // Avanço por conta própria desde o último fix, limitado no tempo (se o GPS
-  // travar, para de correr em vez de "voar" rota afora).
-  const elapsedSec = Math.min(Math.max(0, (nowMs - anchor.atMs) / 1000), NAV_DR_MAX_SECONDS);
-  const creepMeters = anchor.speedMps >= NAV_DR_MIN_SPEED_MPS ? anchor.speedMps * elapsedSec : 0;
+  // Avanço por conta própria desde o último fix:
+  //  - até NAV_DR_EXTRAPOLATE_SECONDS: extrapola à frente na velocidade medida
+  //    (prevê onde o veículo estará no próximo fix — cancela o atraso do GPS);
+  //  - depois disso o GPS ficou quieto (parado / fix suprimido): o avanço
+  //    RECOLHE de volta ao ponto real da âncora ao longo de NAV_DR_DECAY_SECONDS.
+  // Blindado por um teto absoluto em metros.
+  const ageSec = Math.max(0, (nowMs - anchor.atMs) / 1000);
+  let creepMeters = 0;
+  if (anchor.speedMps >= NAV_DR_MIN_SPEED_MPS) {
+    const extrapolateSec = Math.min(ageSec, NAV_DR_EXTRAPOLATE_SECONDS);
+    const decay =
+      ageSec <= NAV_DR_EXTRAPOLATE_SECONDS
+        ? 1
+        : Math.max(0, 1 - (ageSec - NAV_DR_EXTRAPOLATE_SECONDS) / NAV_DR_DECAY_SECONDS);
+    creepMeters = Math.min(anchor.speedMps * extrapolateSec * decay, NAV_DR_MAX_CREEP_METERS);
+  }
   const targetAlong = Math.min(Math.max(0, anchor.alongMeters + creepMeters), routeLengthMeters);
 
   let renderedAlong =

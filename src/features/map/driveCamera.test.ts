@@ -50,19 +50,47 @@ describe('computeDriveStep', () => {
     expect(step!.renderedAlongMeters).toBeCloseTo(101.8, 1);
   });
 
-  it('não deixa o avanço próprio passar de NAV_DR_MAX_SECONDS (GPS travado)', () => {
-    const far = computeDriveStep({
+  it('GPS quieto por muito tempo: o avanço extrapolado RECOLHE de volta ao ponto da âncora', () => {
+    // Logo após a janela de extrapolação (1,2 s), ainda há avanço.
+    const mid = computeDriveStep({
       geometry: straight,
       routeLengthMeters: straightLen,
       anchor: anchor({ alongMeters: 100, atMs: 1000, speedMps: 10 }),
-      nowMs: 1000 + 60_000, // 60 s parado sem fix
-      renderedAlongMeters: 100,
+      nowMs: 1000 + 1500,
+      renderedAlongMeters: null,
       smoothedBearingDegrees: 0,
       headingDegrees: null,
       clientHeightPx: 800,
     });
-    // Teto de 2.5 s → no máximo +25 m de alvo; com suavização, bem menos que isso.
-    expect(far!.renderedAlongMeters).toBeLessThan(100 + 25 * 0.18 + 0.5);
+    expect(mid!.renderedAlongMeters).toBeGreaterThan(100);
+
+    // Bem depois (GPS travado): o avanço já decaiu a zero → volta ao ponto real.
+    const settled = computeDriveStep({
+      geometry: straight,
+      routeLengthMeters: straightLen,
+      anchor: anchor({ alongMeters: 100, atMs: 1000, speedMps: 10 }),
+      nowMs: 1000 + 60_000,
+      renderedAlongMeters: null,
+      smoothedBearingDegrees: 0,
+      headingDegrees: null,
+      clientHeightPx: 800,
+    });
+    expect(settled!.renderedAlongMeters).toBeCloseTo(100, 5);
+  });
+
+  it('blinda contra estimativa de velocidade absurda com o teto de avanço (NAV_DR_MAX_CREEP_METERS)', () => {
+    const step = computeDriveStep({
+      geometry: straight,
+      routeLengthMeters: straightLen,
+      anchor: anchor({ alongMeters: 100, atMs: 1000, speedMps: 999 }),
+      nowMs: 1000 + 1000,
+      renderedAlongMeters: null,
+      smoothedBearingDegrees: 0,
+      headingDegrees: null,
+      clientHeightPx: 800,
+    });
+    // 999 m/s daria centenas de metros — o teto segura em +30 m.
+    expect(step!.renderedAlongMeters).toBeLessThanOrEqual(100 + 30 + 0.01);
   });
 
   it('parado (velocidade abaixo do piso) não escorrega para frente', () => {

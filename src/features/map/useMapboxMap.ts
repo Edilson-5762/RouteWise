@@ -22,9 +22,14 @@ import { computeDriveStep, type DriveAnchor } from './driveCamera';
 import {
   NAV_PUCK_VERTICAL_OFFSET_RATIO,
   NAV_DR_MIN_SPEED_MPS,
+  NAV_DR_MAX_DERIVED_SPEED_MPS,
   NAV_BEARING_SAMPLE_METERS,
   NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES,
   NAV_CAMERA_ENTRY_EASE_MS,
+  NAV_CAMERA_APPLY_MIN_MS,
+  NAV_LINE_UPDATE_MIN_MS,
+  NAV_CAMERA_MIN_MOVE_METERS,
+  NAV_CAMERA_MIN_TURN_DEGREES,
 } from './navConstants';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -240,6 +245,17 @@ export function useMapboxMap({
   const emaSpeedRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
   const routeLengthMetersRef = useRef(0);
+  // Estrangulamento do laço: quando a câmera/linha foram aplicadas pela última
+  // vez, e o último ponto/rumo de fato passados ao `jumpTo` (para pular quadros
+  // sem mudança perceptível — parado no semáforo o laço então não emite eventos).
+  const lastCameraApplyMsRef = useRef(0);
+  const lastLineApplyMsRef = useRef(0);
+  const lastAppliedCenterRef = useRef<Coordinates | null>(null);
+  const lastAppliedBearingRef = useRef<number | null>(null);
+  const lastLineAlongRef = useRef<number | null>(null);
+  const lastPaddingTopRef = useRef<number | null>(null);
+  // Gesto do usuário em andamento (pan/zoom) — o laço rAF respeita na hora.
+  const userPannedRef = useRef(false);
   // Espelhos em ref de props/estado lidos dentro do laço rAF sem recriá-lo.
   const headingDegreesRef = useRef(headingDegrees);
   headingDegreesRef.current = headingDegrees;
@@ -279,13 +295,19 @@ export function useMapboxMap({
     const now =
       typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     const prev = drAnchorRef.current;
-    let speed = speedMetersPerSecondRef.current ?? 0;
-    if (prev) {
+    const gpsSpeed = speedMetersPerSecondRef.current;
+    let speed = gpsSpeed ?? 0;
+    // Só deriva a velocidade de dois fixes quando o GPS NÃO reporta `coords.speed`
+    // (celular parado costuma reportar; alguns navegadores no polling não). Exige
+    // um intervalo mínimo (fixes muito juntos = derivada explode) e limita o
+    // resultado — um salto grande de `alongMeters` é recálculo de rota, não
+    // movimento real.
+    if (prev && (gpsSpeed == null || gpsSpeed < NAV_DR_MIN_SPEED_MPS)) {
       const dtSeconds = (now - prev.atMs) / 1000;
-      if (dtSeconds > 0.05) {
+      if (dtSeconds > 0.3 && dtSeconds < 6) {
         const derived = (projection.alongMeters - prev.alongMeters) / dtSeconds;
-        if (speed < NAV_DR_MIN_SPEED_MPS && derived > 0) {
-          speed = derived;
+        if (derived > NAV_DR_MIN_SPEED_MPS) {
+          speed = Math.min(derived, NAV_DR_MAX_DERIVED_SPEED_MPS);
         }
       }
     }
@@ -338,26 +360,42 @@ export function useMapboxMap({
     };
   }, [containerRef]);
 
-  // Um pan/zoom/rotação disparado pelo próprio usuário sempre carrega
-  // `originalEvent` (o gesto de origem); movimentos de câmera programáticos
-  // (easeTo/flyTo, usados pelo efeito de seguir localização abaixo) não
-  // carregam. Isso permite distinguir "usuário mexeu no mapa" de "o app
-  // recentralizou sozinho" e é o que liga/desliga o botão de recentralizar.
+  // Um gesto do usuário (arrastar/girar/zoom) sempre carrega `originalEvent`;
+  // movimentos programáticos (o `jumpTo` do laço rAF, easeTo etc.) não. Isso
+  // distingue "usuário mexeu" de "o app recentralizou" e liga/desliga o botão
+  // de recentralizar.
+  //
+  // Escutamos os eventos ESPECÍFICOS de gesto (`dragstart`, `rotatestart`, …) e
+  // não só `movestart`: durante a navegação o laço rAF mantém a câmera SEMPRE em
+  // movimento, então `movestart` (que só dispara na transição parado→movendo)
+  // nunca mais vinha do gesto do usuário — o mapa nunca fica parado. Os
+  // `*start` de gesto disparam a cada gesto, independentemente disso.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) {
       return;
     }
 
-    const handleUserMove = (event: { originalEvent?: unknown }) => {
+    const handleUserGesture = (event: { originalEvent?: unknown }) => {
       if (event.originalEvent) {
+        // Ref síncrono (além do estado, que só reflete no próximo render): o laço
+        // rAF consulta isto no MESMO frame e para de aplicar `jumpTo` na hora,
+        // sem "brigar" com o gesto do usuário por um ou dois quadros.
+        userPannedRef.current = true;
         setIsFollowingUser(false);
       }
     };
 
-    map.on('movestart', handleUserMove);
+    // Cast: alguns desses eventos não declaram `originalEvent` no .d.ts desta
+    // versão do mapbox-gl, mas todos o carregam quando o movimento vem de um
+    // gesto do usuário — é justamente o que checamos.
+    type GestureListener = (event: { originalEvent?: unknown }) => void;
+    const on = map.on.bind(map) as (type: string, listener: GestureListener) => void;
+    const off = map.off.bind(map) as (type: string, listener: GestureListener) => void;
+    const gestureEvents = ['movestart', 'dragstart', 'rotatestart', 'pitchstart', 'zoomstart'];
+    gestureEvents.forEach((name) => on(name, handleUserGesture));
     return () => {
-      map.off('movestart', handleUserMove);
+      gestureEvents.forEach((name) => off(name, handleUserGesture));
     };
   }, [containerRef]);
 
@@ -796,6 +834,11 @@ export function useMapboxMap({
       drAnchorRef.current = null;
       renderedAlongRef.current = null;
       emaSpeedRef.current = 0;
+      lastAppliedCenterRef.current = null;
+      lastAppliedBearingRef.current = null;
+      lastLineAlongRef.current = null;
+      lastPaddingTopRef.current = null;
+      userPannedRef.current = false;
       map.easeTo({
         pitch: 0,
         bearing: 0,
@@ -821,6 +864,8 @@ export function useMapboxMap({
       if (stopped) {
         return;
       }
+      const now =
+        typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
       const map = mapRef.current;
       const geometry = routeRef.current?.geometry;
       const anchor = drAnchorRef.current;
@@ -831,14 +876,17 @@ export function useMapboxMap({
         geometry &&
         geometry.length >= 2 &&
         isFollowingUserRef.current &&
-        containerRef.current
+        !userPannedRef.current &&
+        containerRef.current &&
+        // Estrangula a ~30 fps: só recalcula/aplica a cada NAV_CAMERA_APPLY_MIN_MS
+        // (a 60 fps a cascata de eventos do jumpTo travava os botões da UI).
+        now - lastCameraApplyMsRef.current >= NAV_CAMERA_APPLY_MIN_MS
       ) {
         const step = computeDriveStep({
           geometry,
           routeLengthMeters: routeLengthMetersRef.current,
           anchor,
-          nowMs:
-            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(),
+          nowMs: now,
           renderedAlongMeters: renderedAlongRef.current,
           smoothedBearingDegrees: smoothedBearingRef.current,
           headingDegrees: headingDegreesRef.current,
@@ -848,16 +896,59 @@ export function useMapboxMap({
           renderedAlongRef.current = step.renderedAlongMeters;
           smoothedBearingRef.current = step.bearingDegrees;
           lastProjectionRef.current = step.lineProjection;
-          map.jumpTo({
-            center: [step.center.lng, step.center.lat],
-            zoom: NAV_ZOOM,
-            pitch: NAV_PITCH,
-            bearing: step.bearingDegrees,
-            padding: { top: step.paddingTopPx, bottom: 0, left: 0, right: 0 },
-          });
-          const routeSource = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
-          if (routeSource && routeRef.current) {
-            routeSource.setData(buildNavigationRouteGeojson(routeRef.current, step.lineProjection));
+
+          // Pula o jumpTo se nada mudou de forma perceptível desde o último
+          // aplicado — com o veículo parado, a câmera assenta e o laço deixa de
+          // emitir eventos, devolvendo a thread para a UI (botões voltam a
+          // responder no semáforo).
+          const prevCenter = lastAppliedCenterRef.current;
+          const prevBearing = lastAppliedBearingRef.current;
+          const centerMoved =
+            !prevCenter ||
+            haversineDistanceMeters(prevCenter, step.center) >= NAV_CAMERA_MIN_MOVE_METERS;
+          const turned =
+            prevBearing == null ||
+            Math.abs(signedBearingDelta(prevBearing, step.bearingDegrees)) >=
+              NAV_CAMERA_MIN_TURN_DEGREES;
+
+          if (centerMoved || turned) {
+            lastCameraApplyMsRef.current = now;
+            lastAppliedCenterRef.current = step.center;
+            lastAppliedBearingRef.current = step.bearingDegrees;
+            // `padding` só entra no jumpTo quando muda (praticamente só no 1º
+            // quadro — a altura da tela é constante). Passá-lo todo quadro força
+            // o Mapbox a recompor a transform inteira e pesa à toa.
+            const paddingChanged = lastPaddingTopRef.current !== step.paddingTopPx;
+            if (paddingChanged) {
+              lastPaddingTopRef.current = step.paddingTopPx;
+            }
+            map.jumpTo({
+              center: [step.center.lng, step.center.lat],
+              zoom: NAV_ZOOM,
+              pitch: NAV_PITCH,
+              bearing: step.bearingDegrees,
+              ...(paddingChanged
+                ? { padding: { top: step.paddingTopPx, bottom: 0, left: 0, right: 0 } }
+                : {}),
+            });
+
+            // A linha da rota é mais cara que o jumpTo (re-serializa GeoJSON) —
+            // redesenha numa cadência menor e só se o ponto avançou de fato.
+            const lineAlong = lastLineAlongRef.current;
+            if (
+              now - lastLineApplyMsRef.current >= NAV_LINE_UPDATE_MIN_MS &&
+              (lineAlong == null || Math.abs(lineAlong - step.renderedAlongMeters) >= 1)
+            ) {
+              const routeSource = map.getSource(ROUTE_SOURCE_ID) as
+                mapboxgl.GeoJSONSource | undefined;
+              if (routeSource && routeRef.current) {
+                lastLineApplyMsRef.current = now;
+                lastLineAlongRef.current = step.renderedAlongMeters;
+                routeSource.setData(
+                  buildNavigationRouteGeojson(routeRef.current, step.lineProjection),
+                );
+              }
+            }
           }
         }
       }
@@ -881,6 +972,10 @@ export function useMapboxMap({
     drAnchorRef.current = null;
     renderedAlongRef.current = null;
     emaSpeedRef.current = 0;
+    lastAppliedCenterRef.current = null;
+    lastAppliedBearingRef.current = null;
+    lastLineAlongRef.current = null;
+    lastPaddingTopRef.current = null;
   }, [route]);
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um
@@ -890,7 +985,10 @@ export function useMapboxMap({
     if (!isNavigating || isFollowingUser) {
       return;
     }
-    const timeoutId = window.setTimeout(() => setIsFollowingUser(true), RESUME_FOLLOW_DELAY_MS);
+    const timeoutId = window.setTimeout(() => {
+      userPannedRef.current = false;
+      setIsFollowingUser(true);
+    }, RESUME_FOLLOW_DELAY_MS);
     return () => window.clearTimeout(timeoutId);
   }, [isNavigating, isFollowingUser]);
 
@@ -900,6 +998,7 @@ export function useMapboxMap({
   // prévia da rota reenquadra o trajeto, e só passa a seguir de perto o
   // usuário depois que a navegação começa de fato.
   const recenter = useCallback(() => {
+    userPannedRef.current = false;
     setIsFollowingUser(true);
     const map = mapRef.current;
     if (!map) {

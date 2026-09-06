@@ -21,12 +21,23 @@ export const NAV_VEHICLE_ICON_PX = 88;
 // `jumpTo` — a câmera acompanha o veículo real em tempo real e faz a curva
 // grudada na linha.
 
-// Teto do avanço por conta própria (dead-reckoning) desde o último fix. Se o GPS
-// travar, o ponto renderizado para de correr depois disso em vez de "voar".
-export const NAV_DR_MAX_SECONDS = 2.5;
+// Por quanto tempo, desde o último fix, o ponto renderizado é extrapolado à
+// frente na velocidade medida (~1 intervalo de GPS: prevê onde o veículo estará
+// no próximo fix, cancelando o atraso). Passado isso, o GPS ficou quieto
+// (parado, ou fix suprimido pelo deadband) e o avanço RECOLHE de volta ao ponto
+// real da âncora ao longo de NAV_DR_DECAY_SECONDS — sem isso o puck ficava
+// cravado ~1 s de viagem à frente sempre que o veículo parava.
+export const NAV_DR_EXTRAPOLATE_SECONDS = 1.2;
+export const NAV_DR_DECAY_SECONDS = 1;
+// Teto ABSOLUTO do avanço extrapolado, em metros — blinda contra uma estimativa
+// de velocidade ruim (ex.: derivada de um recálculo de rota) atirar o puck longe.
+export const NAV_DR_MAX_CREEP_METERS = 30;
 // Abaixo desta velocidade trata como parado — não deixa o ponto renderizado
 // escorregar para frente por ruído de velocidade quando o veículo está imóvel.
 export const NAV_DR_MIN_SPEED_MPS = 0.5;
+// Teto da velocidade DERIVADA de dois fixes (usada só quando o GPS não reporta
+// `coords.speed`) — acima disso é salto de recálculo/ruído, não movimento real.
+export const NAV_DR_MAX_DERIVED_SPEED_MPS = 45;
 // Suavização por quadro do ponto renderizado em direção ao alvo (dead-reckoning):
 // quando um fix novo reposiciona a âncora, o ponto caminha até lá em vez de
 // saltar. ~0.18/quadro ≈ acompanha em ~0,2 s a 60 fps.
@@ -44,3 +55,17 @@ export const NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
 // Duração do easeTo pontual usado só na ENTRADA da navegação e no botão
 // "Centralizar" (o seguimento contínuo é o laço rAF, não este).
 export const NAV_CAMERA_ENTRY_EASE_MS = 600;
+
+// O laço rAF roda a cada quadro, mas só APLICA a câmera nesta cadência (~30 fps):
+// cada `jumpTo` dispara uma cascata de eventos do Mapbox (movestart/move/
+// rotate/moveend) e a 60 fps isso, somado ao redesenho da linha, travava a UI
+// (os botões de sair/centralizar paravam de responder). 30 fps é suave e leve.
+export const NAV_CAMERA_APPLY_MIN_MS = 33;
+// Cadência máxima do redesenho da LINHA da rota no laço (mais caro que o jumpTo:
+// re-serializa o GeoJSON e re-tesela). ~8 fps é imperceptível para a linha.
+export const NAV_LINE_UPDATE_MIN_MS = 120;
+// Abaixo destes deltas desde o último `jumpTo` aplicado, o quadro é pulado — com
+// o veículo parado a câmera assenta e o laço para de emitir eventos, liberando a
+// UI (é isto que mantém os botões responsivos parado no semáforo).
+export const NAV_CAMERA_MIN_MOVE_METERS = 0.15;
+export const NAV_CAMERA_MIN_TURN_DEGREES = 0.05;
