@@ -7,8 +7,8 @@ import { formatSpeedKmh } from '../../utils/format';
 import {
   haversineDistanceMeters,
   signedBearingDelta,
-  locateAlongRoute,
   forwardBearingAlong,
+  polylineLengthMeters,
   type RouteProjection,
 } from '../../utils/distance';
 import {
@@ -18,13 +18,13 @@ import {
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
+import { computeDriveStep, type DriveAnchor } from './driveCamera';
 import {
   NAV_PUCK_VERTICAL_OFFSET_RATIO,
-  NAV_CAMERA_LEAD_SECONDS,
-  NAV_CAMERA_LEAD_MAX_METERS,
-  NAV_CAMERA_LEAD_MIN_SPEED_MPS,
-  NAV_CAMERA_EASE_DURATION_MS,
+  NAV_DR_MIN_SPEED_MPS,
   NAV_BEARING_SAMPLE_METERS,
+  NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES,
+  NAV_CAMERA_ENTRY_EASE_MS,
 } from './navConstants';
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -43,19 +43,9 @@ const NAV_PITCH = 60;
 // Deslocamento mínimo entre dois fixes para deles derivar uma direção de
 // deslocamento confiável (abaixo disso é ruído de GPS parado).
 const TRAVEL_BEARING_MIN_METERS = 4;
-// Se o heading do GPS diverge tanto assim da direção da rota, o usuário
-// provavelmente saiu da pista de verdade — aí a câmera respeita o GPS em vez
-// da tangente da rota.
-const OFF_ROUTE_HEADING_DIVERGENCE_DEGREES = 65;
-// Suavização exponencial da rotação da câmera: a cada tick de GPS ela caminha
-// só esta fração do caminho até a direção-alvo, então uma curva vira um giro
-// gradual em vez de um "tranco". Menor = mais suave (e mais lento pra reagir).
+// Suavização exponencial da rotação no easeTo pontual de ENTRADA na navegação /
+// "Centralizar" (o seguimento contínuo é o laço rAF em driveCamera).
 const CAMERA_BEARING_SMOOTHING = 0.4;
-// Curva de tempo LINEAR para o easeTo da câmera de condução: velocidade
-// constante o intervalo inteiro entre fixes (ver NAV_CAMERA_EASE_DURATION_MS),
-// em vez do "ease-in-out" padrão que desacelera no fim e faz o mapa parecer
-// congelar antes do próximo fix.
-const LINEAR_EASING = (t: number) => t;
 // Quantos segmentos por tick o progresso pode RECUAR para se recuperar de um
 // fix ruim de GPS (ver `lastRouteSegmentRef`).
 const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
@@ -240,6 +230,23 @@ export function useMapboxMap({
   // commit) — assim linha e câmera concordam no mesmo ponto.
   const lastProjectionRef = useRef<RouteProjection | null>(null);
 
+  // --- Seguimento quadro a quadro (rAF) — ver driveCamera.ts ---
+  // Âncora: última projeção REAL do veículo (m ao longo da rota) + instante +
+  // velocidade estimada. O laço rAF avança sozinho a partir daqui entre fixes.
+  const drAnchorRef = useRef<DriveAnchor | null>(null);
+  // Ponto de fato renderizado no último quadro (m ao longo da rota) e velocidade
+  // suavizada (EMA) — mantidos entre quadros pelo laço.
+  const renderedAlongRef = useRef<number | null>(null);
+  const emaSpeedRef = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
+  const routeLengthMetersRef = useRef(0);
+  // Espelhos em ref de props/estado lidos dentro do laço rAF sem recriá-lo.
+  const headingDegreesRef = useRef(headingDegrees);
+  headingDegreesRef.current = headingDegrees;
+  const isFollowingUserRef = useRef(isFollowingUser);
+  isFollowingUserRef.current = isFollowingUser;
+  const wasNavigatingRef = useRef(false);
+
   // Projeção do veículo sobre a rota, com janela restrita ao progresso real.
   // Atualiza os refs de progresso e de última projeção (monotônico).
   const projectVehicle = useCallback((position: Coordinates | null): RouteProjection | null => {
@@ -261,27 +268,32 @@ export function useMapboxMap({
     return projection;
   }, []);
 
-  // "Antecipa" a projeção do veículo alguns metros À FRENTE ao longo da rota, na
-  // velocidade medida pelo GPS — assim a câmera e a linha representam onde o
-  // veículo ESTÁ AGORA (e não onde estava no último fix, ~1–2 s atrás), e
-  // entram na curva junto com o veículo real. Parado / devagar, devolve a
-  // projeção real sem mexer.
-  const leadProjection = useCallback((real: RouteProjection | null): RouteProjection | null => {
-    const currentRoute = routeRef.current;
-    if (!real || !currentRoute || currentRoute.geometry.length < 2) {
-      return real;
+  // A cada fix de GPS (durante a navegação), reposiciona a âncora do seguimento:
+  // metros REAIS ao longo da rota + agora + velocidade. A velocidade vem do GPS
+  // quando confiável; senão é derivada do avanço em `alongMeters` entre fixes.
+  // É a partir daqui que o laço rAF avança sozinho, quadro a quadro.
+  const updateDriveAnchor = useCallback((projection: RouteProjection | null) => {
+    if (!projection) {
+      return;
     }
-    const speed = speedMetersPerSecondRef.current;
-    if (speed == null || speed < NAV_CAMERA_LEAD_MIN_SPEED_MPS) {
-      return real;
+    const now =
+      typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    const prev = drAnchorRef.current;
+    let speed = speedMetersPerSecondRef.current ?? 0;
+    if (prev) {
+      const dtSeconds = (now - prev.atMs) / 1000;
+      if (dtSeconds > 0.05) {
+        const derived = (projection.alongMeters - prev.alongMeters) / dtSeconds;
+        if (speed < NAV_DR_MIN_SPEED_MPS && derived > 0) {
+          speed = derived;
+        }
+      }
     }
-    const leadMeters = Math.min(speed * NAV_CAMERA_LEAD_SECONDS, NAV_CAMERA_LEAD_MAX_METERS);
-    const loc = locateAlongRoute(currentRoute.geometry, real.alongMeters + leadMeters);
-    return {
-      distanceMeters: 0,
-      segmentIndex: loc.segmentIndex,
-      alongMeters: loc.alongMeters,
-      point: loc.point,
+    emaSpeedRef.current = prev ? emaSpeedRef.current * 0.6 + speed * 0.4 : speed;
+    drAnchorRef.current = {
+      alongMeters: projection.alongMeters,
+      atMs: now,
+      speedMps: Math.max(0, emaSpeedRef.current),
     };
   }, []);
 
@@ -528,7 +540,10 @@ export function useMapboxMap({
     }
 
     const geojson = isNavigating
-      ? buildNavigationRouteGeojson(route, leadProjection(projectVehicle(originRef.current)))
+      ? buildNavigationRouteGeojson(
+          route,
+          lastProjectionRef.current ?? projectVehicle(originRef.current),
+        )
       : buildRouteGeojson(route, originRef.current);
     const maneuverArrowGeojson = buildManeuverArrowGeojson(
       route,
@@ -649,7 +664,7 @@ export function useMapboxMap({
     // para reenquadrar a rota com o padding correto — sem isso, o primeiro
     // fitBounds usaria a altura antiga (0) e a rota nasceria atrás do
     // cartão mesmo assim.
-  }, [route, theme, isNavigating, chromeInsets, projectVehicle, leadProjection]);
+  }, [route, theme, isNavigating, chromeInsets, projectVehicle]);
 
   // Redesenha a linha da rota e a seta de manobra conforme o GPS atualiza, sem
   // repetir fitBounds/criação de camadas (que já rodaram no efeito acima) — só
@@ -660,13 +675,13 @@ export function useMapboxMap({
     if (!map || !route) {
       return;
     }
-    // Calculada aqui (uma vez por tick, sempre que navegando) para a câmera de
-    // condução, que roda logo depois no mesmo commit, reaproveitar via
-    // `lastProjectionRef` — assim linha e câmera concordam no mesmo ponto (o
-    // ponto ANTECIPADO ao longo da rota, ver leadProjection).
-    const projection = isNavigating ? leadProjection(projectVehicle(origin)) : null;
+    // Projeção REAL do veículo (sem antecipar). É a base da âncora do laço rAF
+    // (que faz o seguimento contínuo) e a pintura de fallback da linha — o laço
+    // rAF sobrescreve a linha no quadro seguinte.
+    const projection = isNavigating ? projectVehicle(origin) : null;
     if (isNavigating) {
       lastProjectionRef.current = projection;
+      updateDriveAnchor(projection);
     }
     const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (source) {
@@ -681,15 +696,19 @@ export function useMapboxMap({
     if (arrowSource) {
       arrowSource.setData(buildManeuverArrowGeojson(route, origin, isNavigating, currentStepIndex));
     }
-  }, [route, origin, isNavigating, currentStepIndex, projectVehicle, leadProjection]);
+  }, [route, origin, isNavigating, currentStepIndex, projectVehicle, updateDriveAnchor]);
 
-  // Aplica a câmera de condução (visão "no capô"): centraliza no ponto do
-  // veículo JÁ PROJETADO sobre a rota (o mesmo início da linha — ver
-  // `lastProjectionRef`), inclina, gira para a direção da rua à frente e joga
-  // esse ponto para a parte de baixo da tela, onde MapView desenha o veículo
-  // fixo. Como o alvo é o ponto projetado (que avança suave ao longo da linha,
-  // sem o tremor perpendicular do GPS) e o veículo é fixo na tela, o mapa rola
-  // por baixo sem o carro dar "coices".
+  // Comprimento total da geometria da rota — cacheado por rota (o laço rAF
+  // precisa dele a cada quadro para fixar o avanço no fim da rota).
+  useEffect(() => {
+    routeLengthMetersRef.current = route ? polylineLengthMeters(route.geometry) : 0;
+  }, [route]);
+
+  // easeTo PONTUAL: só a entrada na navegação e o botão "Centralizar". O
+  // seguimento contínuo é o laço rAF abaixo. `padding.top` (não `offset`, que
+  // rodava com o bearing e jogava o carro para fora da linha nas curvas) fixa o
+  // centro do mapa a (0.5 + ratio) da altura da tela, onde MapView desenha o
+  // ícone do veículo.
   const driveCameraTo = useCallback(
     (map: mapboxgl.Map, position: Coordinates) => {
       const previous = lastCameraPositionRef.current;
@@ -698,19 +717,10 @@ export function useMapboxMap({
       }
       lastCameraPositionRef.current = position;
 
-      // Projeção (ANTECIPADA ao longo da rota) já calculada pelo efeito de
-      // redesenho da linha (roda antes deste, no mesmo commit); só recomputa se
-      // ainda não houver uma.
-      const projection = lastProjectionRef.current ?? leadProjection(projectVehicle(position));
+      const projection = projectVehicle(position);
       const routeGeometry = routeRef.current?.geometry;
       const center = isNavigating && projection ? projection.point : position;
 
-      // Direção-alvo: navegando, o RUMO À FRENTE na rota — a corda de ~25 m a
-      // partir do ponto do veículo (ver forwardBearingAlong), estável nas
-      // rotatórias, em vez do azimute do próximo par de vértices (que tremia e
-      // fazia a câmera girar em solavancos na curva). O heading do GPS só assume
-      // quando diverge muito da rota (usuário fora da pista). Sem rota: heading,
-      // senão direção de dois fixes.
       let targetBearing: number;
       if (isNavigating && projection && routeGeometry && routeGeometry.length >= 2) {
         const routeBearing =
@@ -722,15 +732,13 @@ export function useMapboxMap({
         targetBearing =
           headingDegrees != null &&
           Math.abs(signedBearingDelta(routeBearing, headingDegrees)) >
-            OFF_ROUTE_HEADING_DIVERGENCE_DEGREES
+            NAV_OFF_ROUTE_HEADING_DIVERGENCE_DEGREES
             ? headingDegrees
             : routeBearing;
       } else {
         targetBearing = headingDegrees ?? lastTravelBearingRef.current ?? map.getBearing();
       }
 
-      // Primeira volta encaixa direto na direção-alvo; nas seguintes, caminha
-      // só CAMERA_BEARING_SMOOTHING do caminho até ela — giro gradual.
       const previousBearing = smoothedBearingRef.current ?? targetBearing;
       const smoothedBearing =
         (previousBearing +
@@ -739,19 +747,29 @@ export function useMapboxMap({
         360;
       smoothedBearingRef.current = smoothedBearing;
 
-      const offsetY = (containerRef.current?.clientHeight ?? 0) * NAV_PUCK_VERTICAL_OFFSET_RATIO;
+      // Semeia o estado do laço rAF para ele continuar de onde este snap parou.
+      if (isNavigating && projection) {
+        renderedAlongRef.current = projection.alongMeters;
+        if (!drAnchorRef.current) {
+          updateDriveAnchor(projection);
+        }
+      }
+
+      const paddingTop =
+        (containerRef.current?.clientHeight ?? 0) * 2 * NAV_PUCK_VERTICAL_OFFSET_RATIO;
 
       map.easeTo({
         center: [center.lng, center.lat],
         zoom: NAV_ZOOM,
         pitch: NAV_PITCH,
         bearing: smoothedBearing,
-        offset: [0, offsetY],
-        duration: NAV_CAMERA_EASE_DURATION_MS,
-        easing: LINEAR_EASING,
+        padding: isNavigating
+          ? { top: paddingTop, bottom: 0, left: 0, right: 0 }
+          : { top: 0, bottom: 0, left: 0, right: 0 },
+        duration: NAV_CAMERA_ENTRY_EASE_MS,
       });
     },
-    [headingDegrees, containerRef, isNavigating, projectVehicle, leadProjection],
+    [headingDegrees, containerRef, isNavigating, projectVehicle, updateDriveAnchor],
   );
 
   useEffect(() => {
@@ -761,24 +779,108 @@ export function useMapboxMap({
     }
 
     if (isNavigating) {
-      if (!isFollowingUser) {
-        return;
+      // Snap único ao ENTRAR na navegação; daí em diante o laço rAF assume.
+      if (!wasNavigatingRef.current) {
+        wasNavigatingRef.current = true;
+        if (isFollowingUser) {
+          driveCameraTo(map, origin);
+        }
       }
-      driveCameraTo(map, origin);
     } else {
+      wasNavigatingRef.current = false;
       lastCameraPositionRef.current = null;
       lastTravelBearingRef.current = null;
       smoothedBearingRef.current = null;
       lastRouteSegmentRef.current = 0;
       lastProjectionRef.current = null;
-      map.easeTo({ pitch: 0, bearing: 0, offset: [0, 0], duration: 500 });
+      drAnchorRef.current = null;
+      renderedAlongRef.current = null;
+      emaSpeedRef.current = 0;
+      map.easeTo({
+        pitch: 0,
+        bearing: 0,
+        padding: { top: 0, bottom: 0, left: 0, right: 0 },
+        duration: 500,
+      });
     }
   }, [origin, isNavigating, headingDegrees, isFollowingUser, driveCameraTo]);
+
+  // Seguimento quadro a quadro: enquanto navega (e seguindo o usuário), a cada
+  // frame avança o ponto renderizado ao longo da rota pela velocidade medida
+  // (dead-reckoning entre fixes), gira a câmera aos poucos até o rumo à frente e
+  // aplica tudo com `jumpTo` — sem depender de um `easeTo` terminar. É o que faz
+  // o carro do desenho acompanhar o carro real em tempo real e fazer a curva
+  // grudado na linha. Ver `computeDriveStep`.
+  useEffect(() => {
+    if (!isNavigating || !route) {
+      return;
+    }
+    let stopped = false;
+
+    const frame = () => {
+      if (stopped) {
+        return;
+      }
+      const map = mapRef.current;
+      const geometry = routeRef.current?.geometry;
+      const anchor = drAnchorRef.current;
+      if (
+        map &&
+        typeof map.jumpTo === 'function' &&
+        anchor &&
+        geometry &&
+        geometry.length >= 2 &&
+        isFollowingUserRef.current &&
+        containerRef.current
+      ) {
+        const step = computeDriveStep({
+          geometry,
+          routeLengthMeters: routeLengthMetersRef.current,
+          anchor,
+          nowMs:
+            typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now(),
+          renderedAlongMeters: renderedAlongRef.current,
+          smoothedBearingDegrees: smoothedBearingRef.current,
+          headingDegrees: headingDegreesRef.current,
+          clientHeightPx: containerRef.current.clientHeight,
+        });
+        if (step) {
+          renderedAlongRef.current = step.renderedAlongMeters;
+          smoothedBearingRef.current = step.bearingDegrees;
+          lastProjectionRef.current = step.lineProjection;
+          map.jumpTo({
+            center: [step.center.lng, step.center.lat],
+            zoom: NAV_ZOOM,
+            pitch: NAV_PITCH,
+            bearing: step.bearingDegrees,
+            padding: { top: step.paddingTopPx, bottom: 0, left: 0, right: 0 },
+          });
+          const routeSource = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+          if (routeSource && routeRef.current) {
+            routeSource.setData(buildNavigationRouteGeojson(routeRef.current, step.lineProjection));
+          }
+        }
+      }
+      rafIdRef.current = requestAnimationFrame(frame);
+    };
+
+    rafIdRef.current = requestAnimationFrame(frame);
+    return () => {
+      stopped = true;
+      if (rafIdRef.current != null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [isNavigating, route, containerRef]);
 
   // Uma rota nova (plano/recálculo) recomeça o progresso do zero.
   useEffect(() => {
     lastRouteSegmentRef.current = 0;
     lastProjectionRef.current = null;
+    drAnchorRef.current = null;
+    renderedAlongRef.current = null;
+    emaSpeedRef.current = 0;
   }, [route]);
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um

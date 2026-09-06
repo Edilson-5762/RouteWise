@@ -349,7 +349,7 @@ describe('useGeolocation', () => {
 
     act(() => {
       // ~33m ao norte: abaixo dos 500m de precisão informada, mas acima do teto
-      // de 25m — é movimento real e deve mover o puck.
+      // do deadband — é movimento real e deve mover o puck.
       successCallback?.({
         coords: { latitude: -23.5502, longitude: -46.6333, accuracy: 500 },
       } as GeolocationPosition);
