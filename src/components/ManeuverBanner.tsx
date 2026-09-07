@@ -15,7 +15,11 @@ export function ManeuverBanner({ guidance }: ManeuverBannerProps) {
   }
 
   const isRoundabout = ROUNDABOUT_MANEUVER_TYPES.has(guidance.maneuverType);
-  const Icon = getManeuverIcon(guidance.maneuverType, guidance.maneuverModifier);
+  const Icon = getManeuverIcon(
+    guidance.maneuverType,
+    guidance.maneuverModifier,
+    guidance.geometryTurnDegrees,
+  );
 
   return (
     <div className="mx-2 overflow-hidden rounded-b-3xl bg-maneuver text-maneuver-foreground shadow-xl">
@@ -34,8 +38,11 @@ export function ManeuverBanner({ guidance }: ManeuverBannerProps) {
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-4xl font-bold leading-tight">
-            {formatDistance(guidance.distanceMeters ?? 0)}
+          <p className="flex items-baseline gap-3 leading-tight">
+            <span className="text-4xl font-bold">{formatDistance(guidance.distanceMeters ?? 0)}</span>
+            {guidance.turnLabel && (
+              <span className="text-xl font-semibold opacity-80">{guidance.turnLabel}</span>
+            )}
           </p>
           <p className="line-clamp-2 text-2xl font-semibold leading-snug">{guidance.primaryText}</p>
           {guidance.secondaryText && (

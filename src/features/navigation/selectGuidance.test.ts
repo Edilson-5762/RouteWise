@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   selectGuidance,
+  describeTurn,
   LANE_GUIDANCE_DISTANCE_M,
   THEN_PREVIEW_DISTANCE_M,
 } from './selectGuidance';
@@ -197,8 +198,98 @@ describe('selectGuidance', () => {
     expect(g?.distanceMeters).toBe(700);
   });
 
+  it('geometryTurnDegrees vem da geometria real, mesmo quando o texto do provedor discorda', () => {
+    // Geometria sobe para o norte e vira 90° para LESTE (direita) na quina
+    // (0, 0), que é onde fica a manobra do passo seguinte. O provedor, porém,
+    // rotulou como "left" — a geometria tem de vencer.
+    const geometry = [
+      { lat: -0.002, lng: 0 },
+      { lat: -0.001, lng: 0 },
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: 0.002 },
+    ];
+    const r: Route = {
+      geometry,
+      distanceMeters: 500,
+      durationSeconds: 60,
+      steps: [
+        step({ maneuverType: 'depart' }),
+        step({
+          instruction: 'Vire à esquerda',
+          maneuverType: 'turn',
+          maneuverModifier: 'left',
+          maneuverLocation: { lat: 0, lng: 0 },
+        }),
+        step({ instruction: 'Chegou', maneuverType: 'arrive' }),
+      ],
+    };
+    const degrees = selectGuidance(r, 0, 120)?.geometryTurnDegrees;
+    expect(degrees).not.toBeNull();
+    expect(degrees ?? 0).toBeGreaterThan(60);
+  });
+
+  it('geometryTurnDegrees é null quando a rota não tem geometria', () => {
+    const r = route([
+      step(),
+      step({ maneuverType: 'turn', maneuverModifier: 'right' }),
+    ]);
+    expect(selectGuidance(r, 0, 200)?.geometryTurnDegrees).toBeNull();
+  });
+
+  it('geometryTurnDegrees vira também um turnLabel em português', () => {
+    const geometry = [
+      { lat: -0.002, lng: 0 },
+      { lat: -0.001, lng: 0 },
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: 0.002 },
+    ];
+    const r: Route = {
+      geometry,
+      distanceMeters: 500,
+      durationSeconds: 60,
+      steps: [
+        step({ maneuverType: 'depart' }),
+        step({
+          instruction: 'x',
+          maneuverType: 'turn',
+          maneuverModifier: 'left',
+          maneuverLocation: { lat: 0, lng: 0 },
+        }),
+        step({ maneuverType: 'arrive' }),
+      ],
+    };
+    expect(selectGuidance(r, 0, 120)?.turnLabel).toBe('à direita');
+  });
+
   it('exporta os dois limiares', () => {
     expect(LANE_GUIDANCE_DISTANCE_M).toBe(450);
     expect(THEN_PREVIEW_DISTANCE_M).toBe(400);
+  });
+});
+
+describe('describeTurn', () => {
+  it('null ou via reta → null (nada a dizer)', () => {
+    expect(describeTurn(null)).toBeNull();
+    expect(describeTurn(4)).toBeNull();
+    expect(describeTurn(-10)).toBeNull();
+  });
+
+  it('positivo = direita, negativo = esquerda', () => {
+    expect(describeTurn(92)).toBe('à direita');
+    expect(describeTurn(-92)).toBe('à esquerda');
+  });
+
+  it('curva aberta vira "levemente"', () => {
+    expect(describeTurn(40)).toBe('levemente à direita');
+    expect(describeTurn(-40)).toBe('levemente à esquerda');
+  });
+
+  it('curva fechada e retorno têm nome próprio', () => {
+    expect(describeTurn(135)).toBe('fechada à direita');
+    expect(describeTurn(-135)).toBe('fechada à esquerda');
+    expect(describeTurn(172)).toBe('retorno');
+    expect(describeTurn(-172)).toBe('retorno');
   });
 });

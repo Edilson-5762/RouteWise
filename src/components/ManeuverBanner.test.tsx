@@ -7,6 +7,8 @@ function guidance(overrides: Partial<GuidanceView> = {}): GuidanceView {
   return {
     maneuverType: 'turn',
     maneuverModifier: 'right',
+    geometryTurnDegrees: null,
+    turnLabel: null,
     roundaboutDegrees: null,
     roundaboutExit: null,
     distanceMeters: 250,
@@ -57,11 +59,34 @@ describe('ManeuverBanner', () => {
     rerender(
       <ManeuverBanner
         guidance={guidance({
-          then: { maneuverType: 'turn', maneuverModifier: 'left', text: 'Rua X' },
+          then: {
+            maneuverType: 'turn',
+            maneuverModifier: 'left',
+            geometryTurnDegrees: null,
+            turnLabel: null,
+            text: 'Rua X',
+          },
         })}
       />,
     );
     expect(queryByText('Depois')).toBeInTheDocument();
+  });
+
+  it('gira a seta pelo ângulo da geometria, não pelo texto do provedor', () => {
+    // Provedor rotulou "left", mas a via vira 95° à direita: a seta segue a via.
+    const { container } = render(
+      <ManeuverBanner
+        guidance={guidance({ maneuverModifier: 'left', geometryTurnDegrees: 95 })}
+      />,
+    );
+    expect(container.querySelector('[data-glyph-rotation]')?.getAttribute('data-glyph-rotation')).toBe(
+      '95',
+    );
+  });
+
+  it('mostra a frase do sentido ao lado da distância quando há turnLabel', () => {
+    render(<ManeuverBanner guidance={guidance({ turnLabel: 'à esquerda' })} />);
+    expect(screen.getByText('à esquerda')).toBeInTheDocument();
   });
 
   it('não renderiza nada quando guidance é null', () => {

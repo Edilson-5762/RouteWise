@@ -134,6 +134,41 @@ export function travelBearingAlong(
   return null;
 }
 
+// Quanto a via GIRA num ponto de manobra, em graus assinados (-180, 180]:
+// positivo = curva para a DIREITA, negativo = para a ESQUERDA, ~0 = reto.
+// Mede o rumo de CHEGADA (corda de `sampleMeters` antes do ponto até o ponto) e
+// o de SAÍDA (do ponto até `sampleMeters` depois) sobre a geometria real e tira
+// a diferença. É a fonte de verdade para a seta do painel de manobra — a mesma
+// geometria que a seta branca sobre a linha já usa —, em vez do texto
+// "left"/"right" do provedor, que erra em vias de serviço/retornos.
+// `null` quando a geometria é curta ou degenerada demais para um rumo confiável.
+export function turnAngleAtPoint(
+  line: Coordinates[],
+  maneuverPoint: Coordinates,
+  sampleMeters = 20,
+): number | null {
+  if (line.length < 2) {
+    return null;
+  }
+  const cornerIndex = findNearestPointIndex(maneuverPoint, line);
+  const cornerAlong = polylineLengthMeters(line.slice(0, cornerIndex + 1));
+
+  const before = locateAlongRoute(line, cornerAlong - sampleMeters);
+  const corner = locateAlongRoute(line, cornerAlong);
+  const after = locateAlongRoute(line, cornerAlong + sampleMeters);
+
+  if (
+    haversineDistanceMeters(before.point, corner.point) < 2 ||
+    haversineDistanceMeters(corner.point, after.point) < 2
+  ) {
+    return null;
+  }
+
+  const approach = bearingBetween(before.point, corner.point);
+  const exit = bearingBetween(corner.point, after.point);
+  return signedBearingDelta(approach, exit);
+}
+
 // Compat.: corda puramente para a frente (equivalente a travelBearingAlong com
 // backMeters = 0).
 export function forwardBearingAlong(

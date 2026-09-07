@@ -2,8 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { getManeuverIcon } from './getManeuverIcon';
 
-function rotationOf(type: string, modifier: string | null): string | null {
-  const Icon = getManeuverIcon(type, modifier);
+function rotationOf(
+  type: string,
+  modifier: string | null,
+  geometryTurnDegrees?: number | null,
+): string | null {
+  const Icon = getManeuverIcon(type, modifier, geometryTurnDegrees);
   const { container } = render(<Icon />);
   const rotated = container.querySelector('[data-glyph-rotation]');
   return rotated?.getAttribute('data-glyph-rotation') ?? null;
@@ -61,6 +65,25 @@ describe('getManeuverIcon', () => {
   it('combinação desconhecida → arrow reto', () => {
     expect(kindOf('tipo-x', 'mod-y')).toBe('arrow');
     expect(rotationOf('tipo-x', 'mod-y')).toBe('0');
+  });
+
+  it('o ângulo da geometria manda na rotação da seta, mesmo quando o texto discorda', () => {
+    // Provedor diz "left" (-90), mas a geometria vira 97° à direita.
+    expect(rotationOf('turn', 'left', 97)).toBe('97');
+    // Sem ângulo de geometria → volta a obedecer o texto.
+    expect(rotationOf('turn', 'left', null)).toBe('-90');
+    expect(rotationOf('turn', 'left', undefined)).toBe('-90');
+  });
+
+  it('fork/merge/ramp também giram pelo ângulo da geometria', () => {
+    expect(rotationOf('fork', 'left', 40)).toBe('40');
+    expect(rotationOf('merge', 'right', -35)).toBe('-35');
+    expect(rotationOf('off ramp', 'left', 30)).toBe('30');
+  });
+
+  it('rotatória e chegada ignoram o ângulo da geometria (têm desenho próprio)', () => {
+    expect(rotationOf('roundabout', null, 120)).toBe('0');
+    expect(rotationOf('arrive', null, 120)).toBe('0');
   });
 
   it('o componente aceita size e repassa para o svg', () => {

@@ -52,13 +52,25 @@ function resolve(
   return { kind: 'arrow', degrees: degreesFor(maneuverModifier) };
 }
 
+// Kinds cujo desenho é uma seta que só faz sentido girada: aí o ângulo REAL da
+// geometria (quando disponível) manda na rotação, no lugar do texto
+// "left"/"right" do provedor — que erra em vias de serviço/retornos e fazia o
+// painel apontar ao contrário da curva desenhada no mapa. `roundabout-generic`,
+// `arrive` e `uturn` têm desenho próprio e ignoram o ângulo.
+const GEOMETRY_ROTATABLE_KINDS = new Set<ManeuverGlyphKind>(['arrow', 'fork', 'merge', 'ramp']);
+
 // eslint-disable-next-line react-refresh/only-export-components -- o módulo também exporta ROUNDABOUT_MANEUVER_TYPES de propósito
 export function getManeuverIcon(
   maneuverType: string,
   maneuverModifier: string | null,
+  geometryTurnDegrees?: number | null,
 ): (props: ManeuverIconProps) => JSX.Element {
   const { kind, degrees } = resolve(maneuverType, maneuverModifier);
+  const finalDegrees =
+    geometryTurnDegrees != null && GEOMETRY_ROTATABLE_KINDS.has(kind)
+      ? Math.max(-180, Math.min(180, geometryTurnDegrees))
+      : degrees;
   return function ManeuverIcon({ size, className }: ManeuverIconProps) {
-    return <ManeuverGlyph kind={kind} degrees={degrees} size={size} className={className} />;
+    return <ManeuverGlyph kind={kind} degrees={finalDegrees} size={size} className={className} />;
   };
 }

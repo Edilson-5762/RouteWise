@@ -9,6 +9,7 @@ import {
   locateAlongRoute,
   forwardBearingAlong,
   travelBearingAlong,
+  turnAngleAtPoint,
 } from './distance';
 
 describe('haversineDistanceMeters', () => {
@@ -229,5 +230,53 @@ describe('travelBearingAlong', () => {
     // já aponta bem virado para leste — é exatamente o "corte" que queríamos evitar.
     const forward = travelBearingAlong(elle, corner - 15, 0, 25)!;
     expect(forward).toBeGreaterThan(30);
+  });
+});
+
+describe('turnAngleAtPoint', () => {
+  it('curva de 90° para a DIREITA → ângulo ~+90 (positivo = direita)', () => {
+    // Sobe para o norte e vira para leste. Quina em (0, 0).
+    const line = [
+      { lat: -0.002, lng: 0 },
+      { lat: -0.001, lng: 0 },
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: 0.002 },
+    ];
+    const angle = turnAngleAtPoint(line, { lat: 0, lng: 0 });
+    expect(angle).not.toBeNull();
+    expect(angle!).toBeGreaterThan(75);
+    expect(angle!).toBeLessThan(105);
+  });
+
+  it('curva de 90° para a ESQUERDA → ângulo ~-90 (negativo = esquerda)', () => {
+    const line = [
+      { lat: -0.002, lng: 0 },
+      { lat: -0.001, lng: 0 },
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: -0.001 },
+      { lat: 0, lng: -0.002 },
+    ];
+    const angle = turnAngleAtPoint(line, { lat: 0, lng: 0 });
+    expect(angle).not.toBeNull();
+    expect(angle!).toBeGreaterThan(-105);
+    expect(angle!).toBeLessThan(-75);
+  });
+
+  it('via reta → ângulo ~0', () => {
+    const line = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.001 },
+      { lat: 0, lng: 0.002 },
+      { lat: 0, lng: 0.003 },
+    ];
+    const angle = turnAngleAtPoint(line, { lat: 0, lng: 0.0015 });
+    expect(angle).not.toBeNull();
+    expect(Math.abs(angle!)).toBeLessThan(10);
+  });
+
+  it('geometria insuficiente → null', () => {
+    expect(turnAngleAtPoint([{ lat: 0, lng: 0 }], { lat: 0, lng: 0 })).toBeNull();
+    expect(turnAngleAtPoint([], { lat: 0, lng: 0 })).toBeNull();
   });
 });
