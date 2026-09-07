@@ -15,6 +15,13 @@ const ARRIVAL_THRESHOLD_METERS = 25;
 // (dentro de ARRIVAL_ALONG_MAX_METERS) — não depende de o fix cair no pino.
 const ARRIVAL_ALONG_SLACK_METERS = 20;
 const ARRIVAL_ALONG_MAX_METERS = 120;
+// A rota da Directions costuma terminar na via, mas o pino pode ficar dezenas
+// de metros adentro (rampa, estacionamento, dentro do quarteirão). Nesse caso a
+// chegada pelo "fim da rota" só vale quando o veículo REALMENTE parou lá — sem
+// isso o app anunciava "você chegou" com o usuário ainda a caminho, ao cruzar o
+// fim da linha azul. Velocidade desconhecida (campo ausente) conta como parado,
+// preservando o comportamento anterior.
+const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
@@ -217,10 +224,16 @@ export function navigationReducer(
       const distanceToDestination = state.destination
         ? haversineDistanceMeters(action.position, state.destination)
         : Infinity;
+      const stoppedOrUnknownSpeed =
+        (action.speedMetersPerSecond ?? 0) <= ARRIVAL_STOPPED_SPEED_MPS;
       const arrived =
+        // No pino (ou quase) — chegou, esteja em movimento ou não.
         distanceToDestination < ARRIVAL_THRESHOLD_METERS ||
+        // Terminou a rota e está na região do destino, mas PAROU lá (senão
+        // ainda está a caminho, só cruzando o fim da linha).
         (distanceToDestination < ARRIVAL_ALONG_MAX_METERS &&
-          alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS);
+          alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS &&
+          stoppedOrUnknownSpeed);
 
       if (arrived) {
         const travelBearing = state.origin ? bearingBetween(state.origin, action.position) : null;

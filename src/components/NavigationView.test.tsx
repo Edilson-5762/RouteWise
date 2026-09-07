@@ -67,7 +67,7 @@ describe('NavigationView', () => {
       />,
     );
 
-    expect(screen.getByText('Você chegou!')).toBeInTheDocument();
+    expect(screen.getByText('Você chegou ao seu destino')).toBeInTheDocument();
   });
 
   it('mostra aviso não bloqueante quando está recalculando a rota', () => {

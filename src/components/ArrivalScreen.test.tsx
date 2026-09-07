@@ -7,7 +7,7 @@ describe('ArrivalScreen', () => {
     const onDone = vi.fn();
     render(<ArrivalScreen placeName="Av. Paulista, São Paulo" onDone={onDone} />);
 
-    expect(screen.getByText('Você chegou!')).toBeInTheDocument();
+    expect(screen.getByText('Você chegou ao seu destino')).toBeInTheDocument();
     expect(screen.getByText('Av. Paulista, São Paulo')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Concluir'));

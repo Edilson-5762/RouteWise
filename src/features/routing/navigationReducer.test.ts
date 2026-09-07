@@ -128,6 +128,31 @@ describe('navigationReducer', () => {
     expect(chegou.status).toBe('arrived');
   });
 
+  it('passar do fim da linha ainda em movimento e longe do pino NÃO é chegada; parar perto do pino É', () => {
+    // Caso do Atacadão: a rota (Directions) termina na via, mas o pino fica
+    // ~55 m adentro (rampa/estacionamento). Antes o app anunciava "chegou" no
+    // fim da linha azul, com o usuário ainda a caminho.
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const passandoRapido = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 }, // fim da linha, mas ~55 m do pino
+      speedMetersPerSecond: 8,
+    });
+    expect(passandoRapido.status).toBe('navigating');
+
+    const parouPerto = navigationReducer(passandoRapido, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 },
+      speedMetersPerSecond: 0.3,
+    });
+    expect(parouPerto.status).toBe('arrived');
+  });
+
   it('define arrivalSide conforme a direção de chegada vs. a direção do pino', () => {
     const base = navigationReducer(initialNavigationState, {
       type: 'SET_ORIGIN',
