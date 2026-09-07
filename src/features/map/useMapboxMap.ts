@@ -16,6 +16,7 @@ import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
   buildManeuverArrowGeojson,
+  buildDestinationConnectorGeojson,
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
@@ -45,6 +46,9 @@ const MANEUVER_ARROW_SOURCE_ID = 'maneuver-arrow-source';
 const MANEUVER_ARROW_OUTLINE_LAYER_ID = 'maneuver-arrow-outline-layer';
 const MANEUVER_ARROW_SHAPE_LAYER_ID = 'maneuver-arrow-shape-layer';
 const MANEUVER_ARROW_HEAD_LAYER_ID = 'maneuver-arrow-head-layer';
+// "Trecho final" tracejado: fim da rota (na via) → pino (rampa/estacionamento).
+const DEST_CONNECTOR_SOURCE_ID = 'dest-connector-source';
+const DEST_CONNECTOR_LAYER_ID = 'dest-connector-layer';
 const DAY_STYLE = 'mapbox://styles/mapbox/navigation-day-v1';
 const NIGHT_STYLE = 'mapbox://styles/mapbox/navigation-night-v1';
 
@@ -588,6 +592,12 @@ export function useMapboxMap({
         if (map.getSource(MANEUVER_ARROW_SOURCE_ID)) {
           map.removeSource(MANEUVER_ARROW_SOURCE_ID);
         }
+        if (map.getLayer(DEST_CONNECTOR_LAYER_ID)) {
+          map.removeLayer(DEST_CONNECTOR_LAYER_ID);
+        }
+        if (map.getSource(DEST_CONNECTOR_SOURCE_ID)) {
+          map.removeSource(DEST_CONNECTOR_SOURCE_ID);
+        }
         if (map.getSource(ROUTE_SOURCE_ID)) {
           if (map.getLayer(ROUTE_LAYER_ID)) {
             map.removeLayer(ROUTE_LAYER_ID);
@@ -620,6 +630,7 @@ export function useMapboxMap({
       distanceToManeuverMetersRef.current,
       originRef.current,
     );
+    const connectorGeojson = buildDestinationConnectorGeojson(route, destination);
 
     const applyRoute = () => {
       const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
@@ -719,6 +730,29 @@ export function useMapboxMap({
         });
       }
 
+      const connectorSource = map.getSource(DEST_CONNECTOR_SOURCE_ID) as
+        mapboxgl.GeoJSONSource | undefined;
+      if (connectorSource) {
+        connectorSource.setData(connectorGeojson);
+      } else {
+        map.addSource(DEST_CONNECTOR_SOURCE_ID, { type: 'geojson', data: connectorGeojson });
+        // Trecho final tracejado: do fim da rota (na via) até o pino — "continue
+        // daqui até o destino". Só aparece quando a folga vale a pena (ver
+        // buildDestinationConnectorGeojson).
+        map.addLayer({
+          id: DEST_CONNECTOR_LAYER_ID,
+          type: 'line',
+          source: DEST_CONNECTOR_SOURCE_ID,
+          layout: { 'line-cap': 'round' },
+          paint: {
+            'line-color': '#ffffff',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 7, 22, 9],
+            'line-opacity': 0.85,
+            'line-dasharray': [1.4, 1.6],
+          },
+        });
+      }
+
       // Enquadra a rota inteira só no planejamento. Durante a navegação, o
       // efeito de câmera de condução abaixo é quem manda no zoom/pitch/bearing
       // (visão de perto, seguindo o usuário) — deixar o fitBounds rodar aqui
@@ -761,7 +795,7 @@ export function useMapboxMap({
     // para reenquadrar a rota com o padding correto — sem isso, o primeiro
     // fitBounds usaria a altura antiga (0) e a rota nasceria atrás do
     // cartão mesmo assim.
-  }, [route, theme, isNavigating, chromeInsets, projectVehicle]);
+  }, [route, destination, theme, isNavigating, chromeInsets, projectVehicle]);
 
   // Redesenha a linha da rota e a seta de manobra conforme o GPS atualiza, sem
   // repetir fitBounds/criação de camadas (que já rodaram no efeito acima) — só

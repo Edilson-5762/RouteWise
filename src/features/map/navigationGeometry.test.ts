@@ -3,6 +3,7 @@ import {
   buildRouteGeojson,
   buildNavigationRouteGeojson,
   buildManeuverArrowGeojson,
+  buildDestinationConnectorGeojson,
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
@@ -270,6 +271,40 @@ describe('buildManeuverArrowGeojson', () => {
   it('rotatória: já na via de depois (passo atual não é mais rotatória) volta ao normal', () => {
     // currentStepIndex = 2: atual 'continue', seguinte não existe → nada.
     expect(buildManeuverArrowGeojson(roundaboutRoute, true, 2, 10).features).toHaveLength(0);
+  });
+});
+
+describe('buildDestinationConnectorGeojson', () => {
+  const routeEndingShortOfPin: Route = {
+    geometry: [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 0.0009 }, // fim da rota (~100 m a leste)
+    ],
+    steps: [],
+    distanceMeters: 100,
+    durationSeconds: 20,
+  };
+
+  it('sem rota ou sem pino → vazio', () => {
+    expect(buildDestinationConnectorGeojson(null, { lat: 0, lng: 0 }).features).toHaveLength(0);
+    expect(buildDestinationConnectorGeojson(routeEndingShortOfPin, null).features).toHaveLength(0);
+  });
+
+  it('pino a poucos metros do fim da rota → vazio (não vale a pena)', () => {
+    const pinoColado = { lat: 0, lng: 0.00091 }; // ~1 m do fim
+    expect(
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoColado).features,
+    ).toHaveLength(0);
+  });
+
+  it('pino dezenas de metros adentro → um segmento do fim da rota até o pino', () => {
+    const pinoAdentro = { lat: 0.0004, lng: 0.0011 }; // ~50 m adiante/ao lado
+    const fc = buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoAdentro);
+    expect(fc.features).toHaveLength(1);
+    const coords = (fc.features[0].geometry as unknown as { coordinates: [number, number][] })
+      .coordinates;
+    expect(coords[0]).toEqual([0.0009, 0]); // começa no fim da rota
+    expect(coords[coords.length - 1]).toEqual([0.0011, 0.0004]); // termina no pino
   });
 });
 

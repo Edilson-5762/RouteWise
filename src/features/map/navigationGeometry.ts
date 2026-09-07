@@ -129,6 +129,37 @@ export function buildRouteGeojson(
   return lineFeature(coordinates);
 }
 
+// Abaixo desta folga entre o fim da rota e o pino, não há trecho final a
+// mostrar — a rota já termina praticamente no destino.
+export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 12;
+
+// "Trecho final": a Directions termina na via, mas o pino pode ficar dezenas de
+// metros adentro (rampa, estacionamento, dentro do quarteirão). Este é um
+// segmento reto do FIM da geometria da rota até o pino, desenhado tracejado —
+// "continue daqui até o destino". Vazio quando não há rota/pino ou quando a
+// folga é pequena demais para valer a pena.
+export function buildDestinationConnectorGeojson(
+  route: Route | null,
+  destination: Coordinates | null,
+): FeatureCollection {
+  if (!route || !destination || route.geometry.length === 0) {
+    return EMPTY_POINT_COLLECTION;
+  }
+  const end = route.geometry[route.geometry.length - 1];
+  if (haversineDistanceMeters(end, destination) < DESTINATION_CONNECTOR_MIN_GAP_METERS) {
+    return EMPTY_POINT_COLLECTION;
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [
+      lineFeature([
+        [end.lng, end.lat],
+        [destination.lng, destination.lat],
+      ]),
+    ],
+  };
+}
+
 // Linha da rota para o MODO NAVEGAÇÃO. Recebe a PROJEÇÃO do veículo sobre a rota
 // (calculada pelo chamador com janela restrita ao progresso — ver
 // `useMapboxMap`). A linha:
