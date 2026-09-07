@@ -286,6 +286,75 @@ describe('navigationReducer', () => {
     expect(recalculada.currentStepIndex).toBe(0);
   });
 
+  it('num retorno (hairpin) um fix ruidoso não "pula" o progresso para a perna de volta', () => {
+    // Sobe ~55 m, ponta, e volta ~11 m a leste — a perna de volta passa a
+    // poucos metros da de ida. Sem a banda de distância-ao-longo, um fix
+    // ruidoso projetava lá e o progresso (monotônico) travava no salto: no
+    // mapa a linha da rota sumia e o veículo teleportava para dentro do retorno.
+    const hairpin: Route = {
+      geometry: [
+        { lat: 0, lng: 0 },
+        { lat: 0.0004, lng: 0 },
+        { lat: 0.0005, lng: 0 },
+        { lat: 0.00052, lng: 0.00011 },
+        { lat: 0.0004, lng: 0.0001 },
+        { lat: 0, lng: 0.0001 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga',
+          distanceMeters: 55,
+          durationSeconds: 8,
+          maneuverLocation: { lat: 0, lng: 0 },
+          maneuverType: 'depart',
+          maneuverModifier: null,
+        },
+        {
+          instruction: 'Faça o retorno',
+          distanceMeters: 26,
+          durationSeconds: 5,
+          maneuverLocation: { lat: 0.00052, lng: 0.00011 },
+          maneuverType: 'turn',
+          maneuverModifier: 'uturn',
+        },
+        {
+          instruction: 'Siga',
+          distanceMeters: 44,
+          durationSeconds: 6,
+          maneuverLocation: { lat: 0.0004, lng: 0.0001 },
+          maneuverType: 'continue',
+          maneuverModifier: 'straight',
+        },
+      ],
+      distanceMeters: 125,
+      durationSeconds: 19,
+    };
+    const navigating = navigationReducer(
+      navigationReducer(initialNavigationState, { type: 'ROUTE_PLANNED', route: hairpin }),
+      { type: 'START_NAVIGATION' },
+    );
+    // 1º fix: na perna de IDA, ~46 m — estabelece o centro da banda. Devagar
+    // (entrando no retorno), a banda à frente fica curta.
+    const ida = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.00042, lng: 0.000003 },
+      speedMetersPerSecond: 1,
+    });
+    expect(ida.routeAlongMeters).toBeGreaterThan(35);
+    expect(ida.routeAlongMeters).toBeLessThan(55);
+
+    // 2º fix ruidoso: caiu para o lado da perna de VOLTA (projetaria a ~76 m),
+    // mas o veículo ainda está antes da ponta. A banda segura o progresso perto
+    // da ponta.
+    const ruidoso = navigationReducer(ida, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0.00045, lng: 0.00007 },
+      speedMetersPerSecond: 1,
+    });
+    expect(ruidoso.routeAlongMeters).toBeLessThan(70);
+    expect(ruidoso.routeProgressIndex).toBeLessThanOrEqual(3);
+  });
+
   it('RESET mantém a origem (GPS) conhecida em vez de zerá-la', () => {
     // Sem isso, sair da navegação (botão "X") zera `origin` para null; como o
     // efeito em App.tsx que repõe `origin` só reage a uma MUDANÇA de

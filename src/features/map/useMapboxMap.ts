@@ -286,7 +286,17 @@ export function useMapboxMap({
       return null;
     }
     const anchor = Math.max(routeProgressIndexRef.current, lastRouteSegmentRef.current);
-    const projection = projectVehicleOntoRoute(currentRoute, position, anchor);
+    // Banda por distância-ao-longo: impede que um fix ruidoso numa rotatória /
+    // retorno "grude" o veículo no outro lado da dobra (linha some, veículo
+    // teleporta). Centro = último avanço conhecido; teto à frente acompanha a
+    // velocidade medida com folga; sem referência ainda (início), fica livre.
+    const bandCenter = drAnchorRef.current?.alongMeters ?? lastProjectionRef.current?.alongMeters;
+    const bandSpeed = Math.max(drAnchorRef.current?.speedMps ?? 0, emaSpeedRef.current, 0);
+    const projection = projectVehicleOntoRoute(currentRoute, position, anchor, {
+      around: bandCenter,
+      maxAheadMeters: Math.min(140, Math.max(25, bandSpeed * 3 + 20)),
+      maxBehindMeters: 20,
+    });
     // Segue o segmento projetado, mas só deixa RECUAR até
     // PROGRESS_MAX_RECEDE_SEGMENTS por tick — assim se recupera de um fix ruim
     // sem "voltar" de uma vez para um trecho anterior fisicamente próximo.
@@ -664,13 +674,15 @@ export function useMapboxMap({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#172554',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 8, 18, 20, 22, 26],
+            // Fina: um filete de contraste, não uma faixa por cima da rota.
+            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 8, 22, 11],
             'line-opacity': 0.9,
           },
         });
         // Seta BRANCA no formato exato da curva/rotatória/desvio, POR CIMA da
         // linha azul da rota — traça a geometria real da manobra (ver
-        // buildManeuverArrowGeojson) e aparece já a ~150 m dela.
+        // buildManeuverArrowGeojson) e aparece já a ~150 m dela. Estreita de
+        // propósito: só realça o traçado da manobra, sem cobrir a linha da rota.
         map.addLayer({
           id: MANEUVER_ARROW_SHAPE_LAYER_ID,
           type: 'line',
@@ -679,7 +691,7 @@ export function useMapboxMap({
           layout: { 'line-join': 'round', 'line-cap': 'round' },
           paint: {
             'line-color': '#ffffff',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 12, 22, 16],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 18, 5, 22, 7],
           },
         });
         // Cabeça da seta na ponta (direção de saída da curva).
@@ -691,7 +703,8 @@ export function useMapboxMap({
           layout: {
             'text-field': '▲',
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Regular'],
-            'text-size': ['interpolate', ['linear'], ['zoom'], 12, 20, 18, 40, 22, 52],
+            // Cabeça pequena — só marca o sentido da saída, sem dominar a curva.
+            'text-size': ['interpolate', ['linear'], ['zoom'], 12, 12, 18, 22, 22, 30],
             'text-rotate': ['get', 'bearing'],
             'text-rotation-alignment': 'map',
             'text-pitch-alignment': 'map',
@@ -701,7 +714,7 @@ export function useMapboxMap({
           paint: {
             'text-color': '#ffffff',
             'text-halo-color': '#172554',
-            'text-halo-width': 2.5,
+            'text-halo-width': 1.75,
           },
         });
       }

@@ -87,6 +87,10 @@ export interface NavigationState {
   // Metros que ainda faltam até a próxima manobra (cai conforme você se
   // aproxima). `null` antes do primeiro fix de progresso.
   distanceToManeuverMeters: number | null;
+  // Distância JÁ PERCORRIDA ao longo da GEOMETRIA da rota (metros), da última
+  // projeção aceita. Centro da banda que impede a projeção de "pular" para o
+  // outro lado de uma rotatória/retorno. 0 = ainda não estabelecida.
+  routeAlongMeters: number;
   arrivalSide: ArrivalSide;
 }
 

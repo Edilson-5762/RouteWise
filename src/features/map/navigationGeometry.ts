@@ -315,13 +315,20 @@ export function buildManeuverArrowGeojson(
 // do anel, e a linha/câmera davam um salto que só se acertava depois da curva.
 // Com -6/+22 o ponto não tem para onde saltar; o `fromIndex` ainda recua o
 // bastante para se recuperar de um fix ruim, sem alcançar um trecho anterior.
+// `around` (metros já percorridos ao longo da geometria) + `maxAheadMeters`
+// reforçam isso por DISTÂNCIA e não por contagem de segmentos — numa rotatória
+// os segmentos são curtos e +22 deles ainda alcançava o outro lado do anel.
 export function projectVehicleOntoRoute(
   route: Route,
   position: Coordinates,
   progressSegmentIndex: number,
+  band?: { around?: number | null; maxAheadMeters?: number; maxBehindMeters?: number },
 ): RouteProjection {
   return projectOntoRoute(position, route.geometry, {
     fromIndex: progressSegmentIndex - 6,
     toIndex: progressSegmentIndex + 22,
+    aroundAlongMeters: band?.around ?? undefined,
+    maxAheadMeters: band?.maxAheadMeters,
+    maxBehindMeters: band?.maxBehindMeters,
   });
 }

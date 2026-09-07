@@ -116,6 +116,45 @@ describe('projectOntoRoute', () => {
     expect(comJanela.segmentIndex).toBe(0);
     expect(comJanela.distanceMeters).toBeGreaterThan(15);
   });
+
+  // Retorno (hairpin): a perna de volta passa a poucos metros da perna de ida.
+  //  P0(0,0) → P1 → P2 sobe ~55 m ao norte; P3 é a ponta; P4 → P5 desce a volta
+  //  ~11 m a leste. Um fix ruidoso perto da perna de volta "pula" ~30 m à frente.
+  const hairpin = [
+    { lat: 0, lng: 0 },
+    { lat: 0.0004, lng: 0 },
+    { lat: 0.0005, lng: 0 },
+    { lat: 0.00052, lng: 0.00011 },
+    { lat: 0.0004, lng: 0.0001 },
+    { lat: 0, lng: 0.0001 },
+  ];
+  // ~5 m antes da ponta na perna de IDA (along ~50 m), mas o fix caiu para o
+  // lado da perna de VOLTA.
+  const noisyFix = { lat: 0.00045, lng: 0.00007 };
+
+  it('sem banda de distância-ao-longo, o fix ruidoso "pula" para a perna de volta do retorno', () => {
+    const p = projectOntoRoute(noisyFix, hairpin);
+    expect(p.alongMeters).toBeGreaterThan(70);
+  });
+
+  it('com banda de distância-ao-longo (aroundAlongMeters + maxAhead), não pula o retorno', () => {
+    const p = projectOntoRoute(noisyFix, hairpin, {
+      aroundAlongMeters: 48,
+      maxAheadMeters: 12,
+      maxBehindMeters: 15,
+    });
+    // Sem banda pularia para ~76 m (perna de volta); com banda fica na ida.
+    expect(p.alongMeters).toBeLessThan(60);
+  });
+
+  it('se a banda exclui todos os segmentos, cai no melhor sem banda (não zera alongMeters)', () => {
+    const p = projectOntoRoute(noisyFix, hairpin, {
+      aroundAlongMeters: 500,
+      maxAheadMeters: 5,
+      maxBehindMeters: 5,
+    });
+    expect(p.alongMeters).toBeGreaterThan(0);
+  });
 });
 
 describe('locateAlongRoute', () => {

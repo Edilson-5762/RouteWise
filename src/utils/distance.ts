@@ -206,10 +206,23 @@ export interface RouteProjection {
 // trechos retos longos). A janela opcional de segmentos evita que uma rota que
 // passa perto de si mesma (ruas paralelas num grid) "grude" o ponto num trecho
 // distante — o que causava desvio falso e pulos de passo.
+//
+// `aroundAlongMeters` + `maxAheadMeters`/`maxBehindMeters` restringem a
+// candidatura por DISTÂNCIA AO LONGO da rota (não por índice de segmento):
+// numa rotatória ou retorno a geometria dobra sobre si mesma a poucos metros de
+// distância mas DEZENAS de metros à frente ao longo da rota — um fix ruidoso
+// "pulava" para lá (linha da rota sumia, veículo teleportava para o retorno).
+// Se a banda excluir todos os segmentos, cai no melhor sem banda (nunca zera).
 export function projectOntoRoute(
   point: Coordinates,
   line: Coordinates[],
-  window?: { fromIndex?: number; toIndex?: number },
+  window?: {
+    fromIndex?: number;
+    toIndex?: number;
+    aroundAlongMeters?: number;
+    maxAheadMeters?: number;
+    maxBehindMeters?: number;
+  },
 ): RouteProjection {
   if (line.length < 2) {
     return {
@@ -233,7 +246,16 @@ export function projectOntoRoute(
     prefixMeters += haversineDistanceMeters(line[i], line[i + 1]);
   }
 
+  const around = window?.aroundAlongMeters;
+  const bandLo =
+    around != null ? around - (window?.maxBehindMeters ?? Number.POSITIVE_INFINITY) : null;
+  const bandHi =
+    around != null ? around + (window?.maxAheadMeters ?? Number.POSITIVE_INFINITY) : null;
+
+  // `best` = melhor DENTRO da banda de along; `bestAny` = melhor sem banda
+  // (rede de segurança se a banda excluir tudo).
   let best: RouteProjection | null = null;
+  let bestAny: RouteProjection | null = null;
   for (let i = fromIndex; i <= toIndex; i++) {
     const a = line[i];
     const b = line[i + 1];
@@ -245,22 +267,33 @@ export function projectOntoRoute(
     const dy = ap.y - ab.y * t;
     const distanceMeters = Math.sqrt(dx * dx + dy * dy);
     const segLen = haversineDistanceMeters(a, b);
+    const candidate: RouteProjection = {
+      distanceMeters,
+      segmentIndex: i,
+      alongMeters: prefixMeters + t * segLen,
+      // Interpolação linear em lat/lng no segmento — coerente com a
+      // aproximação planar usada acima e suficiente nesta escala.
+      point: {
+        lat: a.lat + (b.lat - a.lat) * t,
+        lng: a.lng + (b.lng - a.lng) * t,
+      },
+    };
 
-    if (!best || distanceMeters < best.distanceMeters) {
-      best = {
-        distanceMeters,
-        segmentIndex: i,
-        alongMeters: prefixMeters + t * segLen,
-        // Interpolação linear em lat/lng no segmento — coerente com a
-        // aproximação planar usada acima e suficiente nesta escala.
-        point: {
-          lat: a.lat + (b.lat - a.lat) * t,
-          lng: a.lng + (b.lng - a.lng) * t,
-        },
-      };
+    if (!bestAny || distanceMeters < bestAny.distanceMeters) {
+      bestAny = candidate;
+    }
+    const inBand =
+      bandLo == null ||
+      bandHi == null ||
+      (candidate.alongMeters >= bandLo && candidate.alongMeters <= bandHi);
+    if (inBand && (!best || distanceMeters < best.distanceMeters)) {
+      best = candidate;
     }
     prefixMeters += segLen;
   }
 
-  return best ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0, point };
+  return (
+    best ??
+    bestAny ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0, point }
+  );
 }

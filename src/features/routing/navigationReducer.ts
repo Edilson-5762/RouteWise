@@ -39,6 +39,18 @@ const BACK_ON_ROUTE_THRESHOLD_METERS = 20;
 // ficavam "atrasadas" (achando que faltava mais do que faltava).
 const PROJECTION_WINDOW_BACK_SEGMENTS = 15;
 const PROJECTION_WINDOW_AHEAD_SEGMENTS = 60;
+// Banda de DISTÂNCIA AO LONGO da rota para a projeção (além da janela de
+// segmentos): numa rotatória/retorno a geometria dobra sobre si mesma a poucos
+// metros de distância, mas dezenas de metros à frente ao longo da rota — sem
+// esta banda um fix ruidoso "pulava" para lá e o progresso (monotônico) travava
+// no salto: a linha da rota sumia e o veículo teleportava para dentro do
+// retorno/rotatória. O teto à frente acompanha a velocidade (fix a cada ~3 s no
+// pior caso) com uma folga; atrás é fixo e curto.
+const PROGRESS_BAND_MAX_FIX_GAP_SECONDS = 3;
+const PROGRESS_BAND_AHEAD_MARGIN_METERS = 20;
+const PROGRESS_BAND_MIN_AHEAD_METERS = 25;
+const PROGRESS_BAND_MAX_AHEAD_METERS = 140;
+const PROGRESS_BAND_BEHIND_METERS = 25;
 // Quantos segmentos por tick o progresso pode RECUAR (auto-recuperação de um
 // fix ruim); nunca abaixo do segmento realmente projetado.
 const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
@@ -64,6 +76,7 @@ export const initialNavigationState: NavigationState = {
   routeDeviated: false,
   routeProgressIndex: 0,
   distanceToManeuverMeters: null,
+  routeAlongMeters: 0,
   arrivalSide: 'ahead',
 };
 
@@ -89,6 +102,7 @@ export function navigationReducer(
         currentStepIndex: 0,
         routeProgressIndex: 0,
         distanceToManeuverMeters: null,
+        routeAlongMeters: 0,
       };
 
     case 'ROUTE_RECALCULATED':
@@ -99,6 +113,7 @@ export function navigationReducer(
         routeDeviated: false,
         routeProgressIndex: 0,
         distanceToManeuverMeters: null,
+        routeAlongMeters: 0,
       };
 
     case 'ROUTE_DEVIATED':
@@ -129,9 +144,20 @@ export function navigationReducer(
       // progresso já registrado — assim uma rota que passa perto de si mesma
       // (ruas paralelas num grid) não "gruda" o ponto num trecho distante, o
       // que gerava desvio falso e pulos de passo.
+      const bandAheadMeters = Math.min(
+        PROGRESS_BAND_MAX_AHEAD_METERS,
+        Math.max(
+          PROGRESS_BAND_MIN_AHEAD_METERS,
+          Math.max(0, action.speedMetersPerSecond ?? 0) * PROGRESS_BAND_MAX_FIX_GAP_SECONDS +
+            PROGRESS_BAND_AHEAD_MARGIN_METERS,
+        ),
+      );
       const projection = projectOntoRoute(action.position, geometry, {
         fromIndex: state.routeProgressIndex - PROJECTION_WINDOW_BACK_SEGMENTS,
         toIndex: state.routeProgressIndex + PROJECTION_WINDOW_AHEAD_SEGMENTS,
+        aroundAlongMeters: state.routeAlongMeters > 0 ? state.routeAlongMeters : undefined,
+        maxAheadMeters: bandAheadMeters,
+        maxBehindMeters: PROGRESS_BAND_BEHIND_METERS,
       });
       // Segue o segmento projetado, mas só deixa RECUAR
       // PROGRESS_MAX_RECEDE_SEGMENTS por tick — auto-recuperação de um fix ruim
@@ -226,6 +252,7 @@ export function navigationReducer(
         currentStepIndex,
         distanceToManeuverMeters,
         routeProgressIndex,
+        routeAlongMeters: projection.alongMeters,
         routeDeviated,
       };
     }
