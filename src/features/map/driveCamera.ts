@@ -7,6 +7,7 @@ import {
 } from '../../utils/distance';
 import {
   NAV_BEARING_TRAIL_METERS,
+  NAV_BEARING_TRAIL_MIN_METERS,
   NAV_BEARING_LOOKAHEAD_METERS,
   NAV_BEARING_SMOOTHING_PER_FRAME,
   NAV_DR_DECAY_SECONDS,
@@ -39,6 +40,14 @@ export interface DriveStepInput {
   smoothedBearingDegrees: number | null;
   headingDegrees: number | null;
   clientHeightPx: number;
+  /**
+   * Distância (m ao longo da geometria) até o vértice da próxima manobra.
+   * Quando o ponto renderizado passa desse vértice, a trilha da corda de rumo
+   * encolhe para NAV_BEARING_TRAIL_MIN_METERS — a câmera termina de girar para a
+   * perna nova logo na quina, em vez de ~16 m depois. `null`/ausente = trilha
+   * cheia sempre (comportamento anterior).
+   */
+  maneuverAlongMeters?: number | null;
 }
 
 export interface DriveStepOutput {
@@ -62,6 +71,7 @@ export function computeDriveStep(input: DriveStepInput): DriveStepOutput | null 
     smoothedBearingDegrees,
     headingDegrees,
     clientHeightPx,
+    maneuverAlongMeters,
   } = input;
 
   if (geometry.length < 2) {
@@ -99,13 +109,20 @@ export function computeDriveStep(input: DriveStepInput): DriveStepOutput | null 
 
   const loc = locateAlongRoute(geometry, renderedAlong);
 
+  // Trilha da corda de rumo: cheia (NAV_BEARING_TRAIL_METERS) enquanto se
+  // aproxima da manobra e enquanto não há vértice informado — segura a perna
+  // atual e não corta a curva em "L". Depois de cruzar o vértice, encolhe
+  // proporcionalmente ao que já se andou além dele (piso NAV_BEARING_TRAIL_MIN_METERS)
+  // para a câmera travar na perna nova logo na quina, sem "andar de lado".
+  const metersPastManeuver =
+    maneuverAlongMeters != null ? renderedAlong - maneuverAlongMeters : -1;
+  const bearingTrailMeters =
+    metersPastManeuver > 0
+      ? Math.max(NAV_BEARING_TRAIL_MIN_METERS, Math.min(NAV_BEARING_TRAIL_METERS, metersPastManeuver))
+      : NAV_BEARING_TRAIL_METERS;
+
   const routeBearing =
-    travelBearingAlong(
-      geometry,
-      renderedAlong,
-      NAV_BEARING_TRAIL_METERS,
-      NAV_BEARING_LOOKAHEAD_METERS,
-    ) ??
+    travelBearingAlong(geometry, renderedAlong, bearingTrailMeters, NAV_BEARING_LOOKAHEAD_METERS) ??
     smoothedBearingDegrees ??
     headingDegrees ??
     0;

@@ -55,6 +55,13 @@ const ARROW_TURNING_MANEUVER_TYPES = new Set([
   'end of road',
 ]);
 
+// Tipos de manobra de ENTRADA em rotatória (não a saída). Quando o passo atual
+// — ou o próximo — é um destes, a seta traça o balão INTEIRO (entrada→saída) e
+// fica na tela até o índice passar do balão, em vez de trocar de alvo para a
+// "próxima manobra" no meio do balão (o `currentStepIndex` avança ~1 s antes da
+// entrada, pela antecipação do reducer, e a seta sumia bem na hora H).
+const ROUNDABOUT_ENTER_MANEUVER_TYPES = new Set(['roundabout', 'rotary', 'roundabout turn']);
+
 function isTurningManeuver(maneuverType: string, maneuverModifier: string | null): boolean {
   const type = (maneuverType ?? '').toLowerCase();
   if (ARROW_TURNING_MANEUVER_TYPES.has(type)) {
@@ -199,32 +206,70 @@ export function buildManeuverArrowGeojson(
 
   // A manobra do passo `i` acontece no INÍCIO dele; enquanto se percorre o
   // passo `currentStepIndex`, a PRÓXIMA manobra é a do passo seguinte.
-  const upcoming = route.steps[currentStepIndex + 1];
-  if (!upcoming || !isTurningManeuver(upcoming.maneuverType, upcoming.maneuverModifier)) {
-    return EMPTY_POINT_COLLECTION;
-  }
+  const currentStep = route.steps[currentStepIndex];
+  const nextStep = route.steps[currentStepIndex + 1];
 
   const distanceToManeuver =
     distanceToManeuverMeters ??
-    (currentPosition
-      ? haversineDistanceMeters(currentPosition, upcoming.maneuverLocation)
+    (currentPosition && nextStep
+      ? haversineDistanceMeters(currentPosition, nextStep.maneuverLocation)
       : Number.POSITIVE_INFINITY);
-  if (distanceToManeuver > MANEUVER_ARROW_VISIBLE_WITHIN_METERS) {
-    return EMPTY_POINT_COLLECTION;
+
+  const geometryLength = polylineLengthMeters(route.geometry);
+  const alongOf = (p: Coordinates) =>
+    polylineLengthMeters(route.geometry.slice(0, findNearestPointIndex(p, route.geometry) + 1));
+
+  // Índice do passo de rotatória em jogo: o atual (percorrendo o balão) ou o
+  // próximo (chegando nele). -1 = não há balão envolvido → caminho normal.
+  const roundaboutStepIndex = ROUNDABOUT_ENTER_MANEUVER_TYPES.has(
+    (currentStep?.maneuverType ?? '').toLowerCase(),
+  )
+    ? currentStepIndex
+    : ROUNDABOUT_ENTER_MANEUVER_TYPES.has((nextStep?.maneuverType ?? '').toLowerCase())
+      ? currentStepIndex + 1
+      : -1;
+
+  let arrowStartAlong: number;
+  let arrowEndAlong: number;
+  let headCornerIndex: number;
+
+  if (roundaboutStepIndex >= 0) {
+    // Balão: traça da ENTRADA à SAÍDA (+ lead in/out). Percorrendo-o, fica
+    // sempre na tela; ainda se aproximando, respeita o teto de visibilidade.
+    const enterLoc = route.steps[roundaboutStepIndex].maneuverLocation;
+    const exitLoc = route.steps[roundaboutStepIndex + 1]?.maneuverLocation ?? enterLoc;
+    const enterAlong = alongOf(enterLoc);
+    const exitAlong = Math.max(alongOf(exitLoc), enterAlong + MIN_SEGMENT_METERS_FOR_BEARING);
+    const approaching = roundaboutStepIndex === currentStepIndex + 1;
+    if (approaching && distanceToManeuver > MANEUVER_ARROW_VISIBLE_WITHIN_METERS) {
+      return EMPTY_POINT_COLLECTION;
+    }
+    arrowStartAlong = enterAlong - MANEUVER_ARROW_LEAD_IN_METERS;
+    arrowEndAlong = exitAlong + MANEUVER_ARROW_LEAD_OUT_METERS;
+    headCornerIndex = findNearestPointIndex(exitLoc, route.geometry);
+  } else {
+    if (!nextStep || !isTurningManeuver(nextStep.maneuverType, nextStep.maneuverModifier)) {
+      return EMPTY_POINT_COLLECTION;
+    }
+    if (distanceToManeuver > MANEUVER_ARROW_VISIBLE_WITHIN_METERS) {
+      return EMPTY_POINT_COLLECTION;
+    }
+    const cornerIndex = findNearestPointIndex(nextStep.maneuverLocation, route.geometry);
+    const cornerAlong = polylineLengthMeters(route.geometry.slice(0, cornerIndex + 1));
+    arrowStartAlong = cornerAlong - MANEUVER_ARROW_LEAD_IN_METERS;
+    arrowEndAlong = cornerAlong + MANEUVER_ARROW_LEAD_OUT_METERS;
+    headCornerIndex = cornerIndex;
   }
 
-  const cornerIndex = findNearestPointIndex(upcoming.maneuverLocation, route.geometry);
-  const cornerAlong = polylineLengthMeters(route.geometry.slice(0, cornerIndex + 1));
+  const startLoc = locateAlongRoute(route.geometry, arrowStartAlong);
+  const endLoc = locateAlongRoute(route.geometry, arrowEndAlong);
 
-  const startLoc = locateAlongRoute(route.geometry, cornerAlong - MANEUVER_ARROW_LEAD_IN_METERS);
-  const endLoc = locateAlongRoute(route.geometry, cornerAlong + MANEUVER_ARROW_LEAD_OUT_METERS);
-
-  // A manobra já ficou para trás — some.
-  if (startLoc.alongMeters >= cornerAlong && endLoc.alongMeters <= cornerAlong) {
-    return EMPTY_POINT_COLLECTION;
-  }
-  const routeLength = polylineLengthMeters(route.geometry);
-  if (cornerAlong + MANEUVER_ARROW_HIDE_PAST_METERS < 0 || cornerAlong > routeLength) {
+  // Janela degenerada / manobra já ficou para trás (além do fim da rota) — some.
+  if (
+    startLoc.alongMeters >= endLoc.alongMeters ||
+    arrowEndAlong + MANEUVER_ARROW_HIDE_PAST_METERS < 0 ||
+    arrowStartAlong > geometryLength
+  ) {
     return EMPTY_POINT_COLLECTION;
   }
 
@@ -248,7 +293,7 @@ export function buildManeuverArrowGeojson(
   const headBearing =
     haversineDistanceMeters(headTailLoc.point, endLoc.point) >= MIN_SEGMENT_METERS_FOR_BEARING
       ? bearingBetween(headTailLoc.point, endLoc.point)
-      : segmentBearingAround(route.geometry, cornerIndex, 1);
+      : segmentBearingAround(route.geometry, headCornerIndex, 1);
 
   const shapeFeature: Feature<LineString> = {
     type: 'Feature',

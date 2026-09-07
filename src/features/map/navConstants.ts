@@ -54,6 +54,14 @@ export const NAV_BEARING_SMOOTHING_PER_FRAME = 0.09;
 // rotatória.
 export const NAV_BEARING_TRAIL_METERS = 16;
 export const NAV_BEARING_LOOKAHEAD_METERS = 4;
+// Trilha MÍNIMA logo depois de passar da quina de uma manobra: assim que o
+// ponto renderizado cruza o vértice da curva, a trilha encolhe de
+// NAV_BEARING_TRAIL_METERS até este valor (proporcional à distância já
+// percorrida além do vértice). Sem isso a corda ainda "pegava" a perna antiga
+// por ~16 m depois da quina e a câmera só terminava de girar bem depois — o
+// carro fixo parecia andar DE LADO na perna nova até a vista alcançar. Antes da
+// quina a trilha continua cheia (não corta a curva em "L").
+export const NAV_BEARING_TRAIL_MIN_METERS = 4;
 // Se o heading do GPS diverge tanto assim do rumo da rota, o usuário
 // provavelmente saiu da pista — aí a câmera respeita o GPS. Alto (100°, era 65)
 // para uma curva fechada legítima — em que o heading do GPS chega a girar 90° em

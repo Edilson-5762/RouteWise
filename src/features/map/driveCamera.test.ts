@@ -130,6 +130,56 @@ describe('computeDriveStep', () => {
     expect(step!.bearingDegrees).toBeLessThan(20);
   });
 
+  describe('rumo na saída de uma curva fechada ("L")', () => {
+    // Sobe ~66 m ao norte, vira 90° e segue ~66 m a leste. Quina em ~66 m.
+    const elle: Coordinates[] = [
+      { lat: 0, lng: 0 },
+      { lat: 0.0006, lng: 0 },
+      { lat: 0.0006, lng: 0.0006 },
+    ];
+    const cornerAlong = polylineLengthMeters([
+      { lat: 0, lng: 0 },
+      { lat: 0.0006, lng: 0 },
+    ]);
+    const elleLen = polylineLengthMeters(elle);
+
+    const stepAt = (renderedAlong: number, maneuverAlongMeters: number | null | undefined) =>
+      computeDriveStep({
+        geometry: elle,
+        routeLengthMeters: elleLen,
+        anchor: { alongMeters: renderedAlong, atMs: 1000, speedMps: 8 },
+        nowMs: 1000,
+        renderedAlongMeters: renderedAlong,
+        smoothedBearingDegrees: null, // encaixa direto no rumo-alvo → testa o ALVO
+        headingDegrees: null,
+        clientHeightPx: 800,
+        maneuverAlongMeters,
+      });
+
+    it('logo APÓS a quina, com a quina informada, o rumo-alvo já é a perna nova (~leste)', () => {
+      const withCorner = stepAt(cornerAlong + 4, cornerAlong)!;
+      expect(withCorner.bearingDegrees).toBeGreaterThan(70);
+      expect(withCorner.bearingDegrees).toBeLessThan(110);
+    });
+
+    it('sem a quina informada, logo após a quina o rumo ainda está preso na perna antiga (crab)', () => {
+      const withoutCorner = stepAt(cornerAlong + 4, undefined)!;
+      expect(withoutCorner.bearingDegrees).toBeLessThan(55);
+    });
+
+    it('ANTES da quina o comportamento é idêntico com ou sem a quina informada (não corta a curva)', () => {
+      const a = stepAt(cornerAlong - 6, cornerAlong)!;
+      const b = stepAt(cornerAlong - 6, undefined)!;
+      expect(a.bearingDegrees).toBeCloseTo(b.bearingDegrees, 6);
+    });
+
+    it('bem depois da quina (> trilha cheia) volta a ser idêntico com ou sem a quina', () => {
+      const a = stepAt(cornerAlong + 30, cornerAlong)!;
+      const b = stepAt(cornerAlong + 30, undefined)!;
+      expect(a.bearingDegrees).toBeCloseTo(b.bearingDegrees, 6);
+    });
+  });
+
   it('deriva o padding.top da altura da tela para o centro cair a 80% (ratio 0.3)', () => {
     const step = computeDriveStep({
       geometry: straight,

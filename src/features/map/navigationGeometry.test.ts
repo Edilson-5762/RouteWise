@@ -197,6 +197,80 @@ describe('buildManeuverArrowGeojson', () => {
         .length,
     ).toBeGreaterThan(0);
   });
+
+  // Rotatória modelada em 3 passos: aproximação → 'roundabout' (arco entrada→
+  // saída, ~60 m) → 'continue'/'straight' (via depois, NÃO é curva).
+  const roundaboutRoute: Route = {
+    geometry: [
+      { lat: 0, lng: 0 },
+      { lat: 0.0009, lng: 0 }, // aproximação (~100 m ao norte)
+      { lat: 0.001, lng: 0 }, // ENTRADA da rotatória
+      { lat: 0.00114, lng: 0.00005 },
+      { lat: 0.0012, lng: 0.0002 },
+      { lat: 0.00112, lng: 0.00034 },
+      { lat: 0.001, lng: 0.0004 }, // SAÍDA da rotatória
+      { lat: 0.001, lng: 0.0016 }, // via depois (~130 m a leste)
+    ],
+    steps: [
+      {
+        instruction: 'Siga ao norte',
+        distanceMeters: 111,
+        durationSeconds: 15,
+        maneuverLocation: { lat: 0, lng: 0 },
+        maneuverType: 'depart',
+        maneuverModifier: null,
+      },
+      {
+        instruction: 'Na rotatória, pegue a 2ª saída',
+        distanceMeters: 63,
+        durationSeconds: 10,
+        maneuverLocation: { lat: 0.001, lng: 0 }, // entrada
+        maneuverType: 'roundabout',
+        maneuverModifier: 'right',
+        roundaboutExit: 2,
+      },
+      {
+        instruction: 'Siga em frente',
+        distanceMeters: 133,
+        durationSeconds: 18,
+        maneuverLocation: { lat: 0.001, lng: 0.0004 }, // saída
+        maneuverType: 'continue',
+        maneuverModifier: 'straight',
+      },
+    ],
+    distanceMeters: 307,
+    durationSeconds: 43,
+  };
+
+  it('rotatória: enquanto se PERCORRE o balão (passo atual é rotatória), a seta continua na tela mesmo que o passo seguinte não seja curva', () => {
+    // currentStepIndex = 1 → passo atual é 'roundabout', seguinte é 'continue/straight'.
+    // Antes: upcoming (continue/straight) não é curva → sumia. Agora: desenha o balão.
+    const fc = buildManeuverArrowGeojson(roundaboutRoute, true, 1, 20);
+    expect(fc.features.length).toBe(2);
+  });
+
+  it('rotatória: a seta traça o balão INTEIRO, da entrada até a saída', () => {
+    const fc = buildManeuverArrowGeojson(roundaboutRoute, true, 1, 20);
+    const shape = fc.features.find((f) => f.properties?.role === 'shape');
+    const coords = (shape!.geometry as unknown as { coordinates: [number, number][] }).coordinates;
+    // Passa pelo topo do balão (lat ~0.0012) E chega perto da saída (lng ~0.0004).
+    expect(coords.some(([, lat]) => lat > 0.00118)).toBe(true);
+    expect(coords.some(([lng]) => lng > 0.00038)).toBe(true);
+  });
+
+  it('rotatória: aproximando (passo SEGUINTE é rotatória) também desenha o balão inteiro', () => {
+    // currentStepIndex = 0, dentro da faixa de visibilidade.
+    const fc = buildManeuverArrowGeojson(roundaboutRoute, true, 0, 40);
+    expect(fc.features.length).toBe(2);
+    const shape = fc.features.find((f) => f.properties?.role === 'shape');
+    const coords = (shape!.geometry as unknown as { coordinates: [number, number][] }).coordinates;
+    expect(coords.some(([lng]) => lng > 0.00038)).toBe(true);
+  });
+
+  it('rotatória: já na via de depois (passo atual não é mais rotatória) volta ao normal', () => {
+    // currentStepIndex = 2: atual 'continue', seguinte não existe → nada.
+    expect(buildManeuverArrowGeojson(roundaboutRoute, true, 2, 10).features).toHaveLength(0);
+  });
 });
 
 describe('bearingBetween', () => {

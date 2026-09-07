@@ -9,6 +9,7 @@ import {
   signedBearingDelta,
   travelBearingAlong,
   polylineLengthMeters,
+  findNearestPointIndex,
   type RouteProjection,
 } from '../../utils/distance';
 import {
@@ -254,6 +255,10 @@ export function useMapboxMap({
   const emaSpeedRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
   const routeLengthMetersRef = useRef(0);
+  // Distância (m ao longo da geometria) até o vértice da próxima manobra —
+  // cacheada por rota + passo atual; o laço rAF a usa para encolher a trilha da
+  // corda de rumo assim que o carro cruza a quina (ver computeDriveStep).
+  const maneuverAlongMetersRef = useRef<number | null>(null);
   // Estrangulamento do laço: quando a câmera/linha foram aplicadas pela última
   // vez, e o último ponto/rumo de fato passados ao `jumpTo` (para pular quadros
   // sem mudança perceptível — parado no semáforo o laço então não emite eventos).
@@ -799,6 +804,19 @@ export function useMapboxMap({
     routeLengthMetersRef.current = route ? polylineLengthMeters(route.geometry) : 0;
   }, [route]);
 
+  // Vértice da próxima manobra, em metros ao longo da geometria — recalculado só
+  // quando a rota ou o passo mudam (não a cada quadro). A manobra do passo `i`
+  // acontece no início dele, então a próxima é a do passo currentStepIndex + 1.
+  useEffect(() => {
+    const next = route?.steps[currentStepIndex + 1];
+    if (!route || !next || route.geometry.length < 2) {
+      maneuverAlongMetersRef.current = null;
+      return;
+    }
+    const idx = findNearestPointIndex(next.maneuverLocation, route.geometry);
+    maneuverAlongMetersRef.current = polylineLengthMeters(route.geometry.slice(0, idx + 1));
+  }, [route, currentStepIndex]);
+
   // easeTo PONTUAL: só a entrada na navegação e o botão "Centralizar". O
   // seguimento contínuo é o laço rAF abaixo. `padding.top` (não `offset`, que
   // rodava com o bearing e jogava o carro para fora da linha nas curvas) fixa o
@@ -953,6 +971,7 @@ export function useMapboxMap({
           smoothedBearingDegrees: smoothedBearingRef.current,
           headingDegrees: headingDegreesRef.current,
           clientHeightPx: containerRef.current.clientHeight,
+          maneuverAlongMeters: maneuverAlongMetersRef.current,
         });
         if (step) {
           renderedAlongRef.current = step.renderedAlongMeters;
