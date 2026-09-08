@@ -14,7 +14,7 @@ import {
 //  - <= AT_PIN: chegou, mesmo em movimento (passou por cima do pino).
 //  - <= NEAR_PIN_STOPPED: chegou se PAROU ali (estacionou o mais perto que dava).
 const ARRIVAL_AT_PIN_METERS = 8;
-const ARRIVAL_NEAR_PIN_STOPPED_METERS = 18;
+const ARRIVAL_NEAR_PIN_STOPPED_METERS = 25;
 // Velocidade (m/s) abaixo da qual o veículo conta como parado. Velocidade
 // desconhecida (campo ausente) também conta como parado.
 const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
