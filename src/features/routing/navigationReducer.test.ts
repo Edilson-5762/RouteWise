@@ -144,6 +144,9 @@ describe('navigationReducer', () => {
       speedMetersPerSecond: 8,
     });
     expect(passandoRapido.status).toBe('navigating');
+    // Nesse trecho final o painel mostra "Continue X m até o destino".
+    expect(passandoRapido.finalApproachMeters).toBeGreaterThan(40);
+    expect(passandoRapido.finalApproachMeters).toBeLessThan(70);
 
     const parouPerto = navigationReducer(passandoRapido, {
       type: 'POSITION_UPDATED',
@@ -151,6 +154,21 @@ describe('navigationReducer', () => {
       speedMetersPerSecond: 0.3,
     });
     expect(parouPerto.status).toBe('arrived');
+    expect(parouPerto.finalApproachMeters).toBeNull();
+  });
+
+  it('finalApproachMeters é null enquanto a rota ainda não acabou', () => {
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+    const noMeio = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 1.5 },
+      speedMetersPerSecond: 8,
+    });
+    expect(noMeio.finalApproachMeters).toBeNull();
   });
 
   it('define arrivalSide conforme a direção de chegada vs. a direção do pino', () => {

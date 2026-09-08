@@ -22,6 +22,11 @@ const ARRIVAL_ALONG_MAX_METERS = 120;
 // fim da linha azul. Velocidade desconhecida (campo ausente) conta como parado,
 // preservando o comportamento anterior.
 const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
+// Abaixo desta folga entre o fim da rota e o pino não há "trecho final" a
+// anunciar — a rota já termina praticamente no destino. (Mesmo valor de
+// DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer não importa
+// de lá para não depender do módulo de mapa.)
+const FINAL_APPROACH_MIN_METERS = 12;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
@@ -84,6 +89,7 @@ export const initialNavigationState: NavigationState = {
   routeProgressIndex: 0,
   distanceToManeuverMeters: null,
   routeAlongMeters: 0,
+  finalApproachMeters: null,
   arrivalSide: 'ahead',
 };
 
@@ -110,6 +116,7 @@ export function navigationReducer(
         routeProgressIndex: 0,
         distanceToManeuverMeters: null,
         routeAlongMeters: 0,
+        finalApproachMeters: null,
       };
 
     case 'ROUTE_RECALCULATED':
@@ -121,6 +128,7 @@ export function navigationReducer(
         routeProgressIndex: 0,
         distanceToManeuverMeters: null,
         routeAlongMeters: 0,
+        finalApproachMeters: null,
       };
 
     case 'ROUTE_DEVIATED':
@@ -249,7 +257,13 @@ export function navigationReducer(
             arrivalSide = 'left';
           }
         }
-        return { ...state, origin: action.position, status: 'arrived', arrivalSide };
+        return {
+          ...state,
+          origin: action.position,
+          status: 'arrived',
+          arrivalSide,
+          finalApproachMeters: null,
+        };
       }
 
       let routeDeviated = state.routeDeviated;
@@ -259,6 +273,16 @@ export function navigationReducer(
         routeDeviated = false;
       }
 
+      // Trecho final: já percorreu a rota inteira (na via) mas o pino fica
+      // adentro e o veículo ainda não parou lá → mostra "Continue X m até o
+      // destino" no painel enquanto anda pelo tracejado.
+      const routeComplete =
+        alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS;
+      const finalApproachMeters =
+        routeComplete && distanceToDestination >= FINAL_APPROACH_MIN_METERS
+          ? distanceToDestination
+          : null;
+
       return {
         ...state,
         origin: action.position,
@@ -266,6 +290,7 @@ export function navigationReducer(
         distanceToManeuverMeters,
         routeProgressIndex,
         routeAlongMeters: projection.alongMeters,
+        finalApproachMeters,
         routeDeviated,
       };
     }

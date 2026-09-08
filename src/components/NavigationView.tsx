@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { ManeuverBanner } from './ManeuverBanner';
+import { FinalApproachBanner } from './FinalApproachBanner';
 import { NavigationStatusBar } from './NavigationStatusBar';
 import { ArrivalScreen } from './ArrivalScreen';
 import { ErrorBanner } from './ErrorBanner';
@@ -118,7 +119,11 @@ export function NavigationView({
     // avisos, barra de status) precisa reativar pointer-events-auto para si.
     <div className="relative flex h-screen flex-col pointer-events-none">
       <div className="pointer-events-auto">
-        <ManeuverBanner guidance={guidance} />
+        {state.finalApproachMeters != null ? (
+          <FinalApproachBanner meters={state.finalApproachMeters} />
+        ) : (
+          <ManeuverBanner guidance={guidance} />
+        )}
       </div>
       {isRecalculating && (
         <div

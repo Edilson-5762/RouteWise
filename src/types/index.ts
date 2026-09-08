@@ -91,6 +91,11 @@ export interface NavigationState {
   // projeção aceita. Centro da banda que impede a projeção de "pular" para o
   // outro lado de uma rotatória/retorno. 0 = ainda não estabelecida.
   routeAlongMeters: number;
+  // Trecho final: distância em linha reta até o pino quando a rota (via) já
+  // acabou mas o destino fica adentro (rampa/estacionamento) e o veículo ainda
+  // não parou lá. `null` fora dessa situação. Alimenta o "Continue X m até o
+  // destino" no painel, junto com a linha tracejada no mapa.
+  finalApproachMeters: number | null;
   arrivalSide: ArrivalSide;
 }
 
