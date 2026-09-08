@@ -76,6 +76,10 @@ const RESUME_FOLLOW_DELAY_MS = 4000;
 // rumo do veículo numa curva. ~100° cobre uma curva fechada em "L"; além disso
 // é ruído de um quadro ruim e não deve rodar o ícone.
 const NAV_PUCK_MAX_PIVOT_DEGREES = 100;
+// Fração por quadro (~30 fps) com que o pivô do ícone COLAPSA para 0 ao sair da
+// curva — só na volta, não na ida. ~0,4 ⇒ o ícone endireita em ~150 ms na quina
+// do "L", em vez de acompanhar o retorno lento (~0,5 s) da câmera.
+const NAV_PUCK_STRAIGHTEN_RATE = 0.4;
 
 interface UseMapboxMapOptions {
   containerRef: RefObject<HTMLDivElement>;
@@ -301,6 +305,13 @@ export function useMapboxMap({
   const lastAppliedBearingRef = useRef<number | null>(null);
   const lastLineAlongRef = useRef<number | null>(null);
   const lastPaddingTopRef = useRef<number | null>(null);
+  // Último ângulo de pivô aplicado ao ícone do veículo. O ícone ENTRA na curva
+  // acompanhando o atraso da câmera (giro gradual, que o usuário quer manter),
+  // mas ao SAIR — quando o rumo do veículo já é o da reta e só a câmera está
+  // atrasada — ele endireita RÁPIDO (o usuário reclamou que voltava "de lado"
+  // devagar até ficar reto). Suavização assimétrica: cresce colado no alvo,
+  // encolhe a ~0,4/quadro (~150 ms para endireitar de vez na quina do "L").
+  const lastIconPivotRef = useRef(0);
   // Gesto do usuário em andamento (pan/zoom) — o laço rAF respeita na hora.
   const userPannedRef = useRef(false);
   // Dedo AINDA na tela (entre `*start` e `*end` de um gesto): enquanto true, o
@@ -1086,6 +1097,7 @@ export function useMapboxMap({
       lastAppliedBearingRef.current = null;
       lastLineAlongRef.current = null;
       lastPaddingTopRef.current = null;
+      lastIconPivotRef.current = 0;
       userPannedRef.current = false;
       map.easeTo({
         pitch: 0,
@@ -1160,6 +1172,7 @@ export function useMapboxMap({
         if (navVehicleIconRef?.current) {
           navVehicleIconRef.current.style.transform = 'rotate(0deg)';
         }
+        lastIconPivotRef.current = 0;
         rafIdRef.current = requestAnimationFrame(frame);
         return;
       }
@@ -1199,13 +1212,23 @@ export function useMapboxMap({
           // alcança. Limitado para um quadro ruim não rodar o ícone à toa.
           const iconEl = navVehicleIconRef?.current;
           if (iconEl) {
-            const pivot = Math.max(
+            const rawPivot = Math.max(
               -NAV_PUCK_MAX_PIVOT_DEGREES,
               Math.min(
                 NAV_PUCK_MAX_PIVOT_DEGREES,
                 signedBearingDelta(step.bearingDegrees, step.vehicleBearingDegrees),
               ),
             );
+            // Assimétrico: ENTRANDO na curva (pivô aumentando) o ícone segue o
+            // alvo de imediato; SAINDO (pivô diminuindo) ele colapsa depressa
+            // para 0 em vez de acompanhar o retorno lento da câmera — a moto
+            // "endireita de uma vez" na saída do "L".
+            const prev = lastIconPivotRef.current;
+            const pivot =
+              Math.abs(rawPivot) >= Math.abs(prev)
+                ? rawPivot
+                : prev + (rawPivot - prev) * NAV_PUCK_STRAIGHTEN_RATE;
+            lastIconPivotRef.current = pivot;
             iconEl.style.transform = `rotate(${pivot.toFixed(1)}deg)`;
           }
 
@@ -1288,6 +1311,7 @@ export function useMapboxMap({
     lastAppliedBearingRef.current = null;
     lastLineAlongRef.current = null;
     lastPaddingTopRef.current = null;
+    lastIconPivotRef.current = 0;
   }, [route]);
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um

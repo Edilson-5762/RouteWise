@@ -27,7 +27,10 @@ const ARRIVAL_ALONG_SLACK_METERS = 20;
 // disso a rota já termina praticamente no destino — chegada normal. (Mesmo
 // valor de DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer
 // não importa de lá para não depender do módulo de mapa.)
-const FINAL_APPROACH_MIN_GAP_METERS = 20;
+// 8 m (era 20): num teste em rua o pino de uma UBS caiu ~10 m para dentro da
+// quadra e nem o tracejado nem o "Continue X m" apareciam. 8 m ainda evita um
+// tracejado inútil quando a rota já termina em cima do destino.
+const FINAL_APPROACH_MIN_GAP_METERS = 8;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;

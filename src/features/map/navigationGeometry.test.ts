@@ -291,15 +291,22 @@ describe('buildDestinationConnectorGeojson', () => {
     expect(buildDestinationConnectorGeojson(routeEndingShortOfPin, null).features).toHaveLength(0);
   });
 
-  it('pino dentro da folga mínima (< 20 m) → vazio (não vale a pena)', () => {
+  it('pino dentro da folga mínima (< 8 m) → vazio (não vale a pena)', () => {
     const pinoColado = { lat: 0, lng: 0.00091 }; // ~1 m do fim
-    const pinoQuinzeMetros = { lat: 0, lng: 0.001035 }; // ~15 m do fim
+    const pinoCincoMetros = { lat: 0, lng: 0.000945 }; // ~5 m do fim
     expect(
       buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoColado).features,
     ).toHaveLength(0);
     expect(
-      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoQuinzeMetros).features,
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoCincoMetros).features,
     ).toHaveLength(0);
+  });
+
+  it('pino ~10 m para dentro da quadra → já mostra o tracejado (teste em rua: UBS)', () => {
+    const pinoDezMetros = { lat: 0, lng: 0.00099 }; // ~10 m do fim
+    expect(
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoDezMetros).features,
+    ).toHaveLength(1);
   });
 
   it('pino dezenas de metros adentro → um segmento do fim da rota até o pino', () => {

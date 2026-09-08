@@ -130,8 +130,10 @@ export function buildRouteGeojson(
 }
 
 // Abaixo desta folga entre o fim da rota e o pino, não há trecho final a
-// mostrar — a rota já termina praticamente no destino.
-export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 20;
+// mostrar — a rota já termina praticamente no destino. 8 m (era 20): num teste
+// em rua o pino de uma UBS caiu ~10 m para dentro da quadra e o tracejado não
+// aparecia. Precisa bater com FINAL_APPROACH_MIN_GAP_METERS no reducer.
+export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 8;
 
 // "Trecho final": a Directions termina na via, mas o pino pode ficar dezenas de
 // metros adentro (rampa, estacionamento, dentro do quarteirão). Este é um
