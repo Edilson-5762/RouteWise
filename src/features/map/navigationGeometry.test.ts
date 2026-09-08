@@ -290,10 +290,14 @@ describe('buildDestinationConnectorGeojson', () => {
     expect(buildDestinationConnectorGeojson(routeEndingShortOfPin, null).features).toHaveLength(0);
   });
 
-  it('pino a poucos metros do fim da rota → vazio (não vale a pena)', () => {
+  it('pino dentro da folga mínima (< 20 m) → vazio (não vale a pena)', () => {
     const pinoColado = { lat: 0, lng: 0.00091 }; // ~1 m do fim
+    const pinoQuinzeMetros = { lat: 0, lng: 0.001035 }; // ~15 m do fim
     expect(
       buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoColado).features,
+    ).toHaveLength(0);
+    expect(
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoQuinzeMetros).features,
     ).toHaveLength(0);
   });
 

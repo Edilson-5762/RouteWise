@@ -131,7 +131,7 @@ export function buildRouteGeojson(
 
 // Abaixo desta folga entre o fim da rota e o pino, não há trecho final a
 // mostrar — a rota já termina praticamente no destino.
-export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 12;
+export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 20;
 
 // "Trecho final": a Directions termina na via, mas o pino pode ficar dezenas de
 // metros adentro (rampa, estacionamento, dentro do quarteirão). Este é um

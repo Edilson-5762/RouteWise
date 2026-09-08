@@ -26,7 +26,7 @@ const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
 // anunciar — a rota já termina praticamente no destino. (Mesmo valor de
 // DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer não importa
 // de lá para não depender do módulo de mapa.)
-const FINAL_APPROACH_MIN_METERS = 12;
+const FINAL_APPROACH_MIN_METERS = 20;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
