@@ -59,11 +59,19 @@ export interface RouteStep {
   banners?: BannerInstruction[];
 }
 
+// Nível de congestionamento de um trecho da rota, vindo das anotações do perfil
+// `driving-traffic` da Directions API (annotations=congestion).
+export type CongestionLevel = 'unknown' | 'low' | 'moderate' | 'heavy' | 'severe';
+
 export interface Route {
   geometry: Coordinates[];
   steps: RouteStep[];
   distanceMeters: number;
   durationSeconds: number;
+  // Um nível por SEGMENTO da geometria (comprimento = geometry.length - 1).
+  // Só é preenchido para perfis com trânsito (driving / motorcycling); a pé e
+  // de bike vem vazio. Opcional para não quebrar fixtures de teste antigas.
+  congestions?: CongestionLevel[];
 }
 
 export type NavigationStatus = 'idle' | 'routePlanned' | 'navigating' | 'arrived';

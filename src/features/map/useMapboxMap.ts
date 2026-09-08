@@ -18,6 +18,7 @@ import {
   buildNavigationRouteGeojson,
   buildManeuverArrowGeojson,
   buildDestinationConnectorGeojson,
+  buildCongestionGeojson,
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
@@ -41,6 +42,9 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 const ROUTE_SOURCE_ID = 'route-source';
 const ROUTE_CASING_LAYER_ID = 'route-casing-layer';
 const ROUTE_LAYER_ID = 'route-layer';
+// Faixa colorida de trânsito (amarelo/vermelho) SOBRE a linha azul da rota.
+const CONGESTION_SOURCE_ID = 'congestion-source';
+const CONGESTION_LAYER_ID = 'congestion-layer';
 const MANEUVER_ARROW_SOURCE_ID = 'maneuver-arrow-source';
 // Linha branca no formato da curva (role: 'shape'), com contorno escuro por
 // baixo, + cabeça da seta na ponta (role: 'head') — tudo em cima da linha azul.
@@ -633,6 +637,12 @@ export function useMapboxMap({
         if (map.getSource(DEST_CONNECTOR_SOURCE_ID)) {
           map.removeSource(DEST_CONNECTOR_SOURCE_ID);
         }
+        if (map.getLayer(CONGESTION_LAYER_ID)) {
+          map.removeLayer(CONGESTION_LAYER_ID);
+        }
+        if (map.getSource(CONGESTION_SOURCE_ID)) {
+          map.removeSource(CONGESTION_SOURCE_ID);
+        }
         if (map.getSource(ROUTE_SOURCE_ID)) {
           if (map.getLayer(ROUTE_LAYER_ID)) {
             map.removeLayer(ROUTE_LAYER_ID);
@@ -666,6 +676,10 @@ export function useMapboxMap({
       originRef.current,
     );
     const connectorGeojson = buildDestinationConnectorGeojson(route, destination);
+    const congestionGeojson = buildCongestionGeojson(
+      route,
+      isNavigating ? (lastProjectionRef.current ?? projectVehicle(originRef.current)) : null,
+    );
 
     const applyRoute = () => {
       const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
@@ -697,6 +711,37 @@ export function useMapboxMap({
           paint: {
             'line-color': '#2563eb',
             'line-width': ['interpolate', ['linear'], ['zoom'], 10, 4, 18, 15, 22, 21],
+          },
+        });
+      }
+
+      // Faixa de trânsito POR CIMA da linha azul: um pouco mais fina que ela,
+      // então a azul aparece como contorno. Cor por nível (âmbar → vermelho →
+      // vermelho escuro). Fica abaixo da seta de manobra (adicionada depois).
+      const congestionSource = map.getSource(CONGESTION_SOURCE_ID) as
+        mapboxgl.GeoJSONSource | undefined;
+      if (congestionSource) {
+        congestionSource.setData(congestionGeojson);
+      } else {
+        map.addSource(CONGESTION_SOURCE_ID, { type: 'geojson', data: congestionGeojson });
+        map.addLayer({
+          id: CONGESTION_LAYER_ID,
+          type: 'line',
+          source: CONGESTION_SOURCE_ID,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': [
+              'match',
+              ['get', 'level'],
+              'severe',
+              '#7f1d1d',
+              'heavy',
+              '#dc2626',
+              'moderate',
+              '#f59e0b',
+              '#dc2626',
+            ],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 18, 11, 22, 16],
           },
         });
       }
@@ -876,6 +921,13 @@ export function useMapboxMap({
           origin,
         ),
       );
+    }
+    // Faixa de trânsito: na navegação recorta no ponto do veículo (não repinta o
+    // trecho já percorrido); no planejamento mostra a rota inteira.
+    const congestionSource = map.getSource(CONGESTION_SOURCE_ID) as
+      mapboxgl.GeoJSONSource | undefined;
+    if (congestionSource) {
+      congestionSource.setData(buildCongestionGeojson(route, isNavigating ? projection : null));
     }
   }, [
     route,

@@ -4,6 +4,7 @@ import {
   buildNavigationRouteGeojson,
   buildManeuverArrowGeojson,
   buildDestinationConnectorGeojson,
+  buildCongestionGeojson,
   projectVehicleOntoRoute,
   bearingBetween,
 } from './navigationGeometry';
@@ -309,6 +310,55 @@ describe('buildDestinationConnectorGeojson', () => {
       .coordinates;
     expect(coords[0]).toEqual([0.0009, 0]); // começa no fim da rota
     expect(coords[coords.length - 1]).toEqual([0.0011, 0.0004]); // termina no pino
+  });
+});
+
+describe('buildCongestionGeojson', () => {
+  // 4 segmentos: normal, moderado, pesado, pesado.
+  const routeWithTraffic: Route = {
+    geometry: [
+      { lat: 0, lng: 0 },
+      { lat: 0.001, lng: 0 },
+      { lat: 0.002, lng: 0 },
+      { lat: 0.003, lng: 0 },
+      { lat: 0.004, lng: 0 },
+    ],
+    steps: [],
+    distanceMeters: 444,
+    durationSeconds: 60,
+    congestions: ['low', 'moderate', 'heavy', 'heavy'],
+  };
+
+  it('sem dados de trânsito → vazio', () => {
+    expect(buildCongestionGeojson(null).features).toHaveLength(0);
+    expect(
+      buildCongestionGeojson({ ...routeWithTraffic, congestions: undefined }).features,
+    ).toHaveLength(0);
+    expect(
+      buildCongestionGeojson({ ...routeWithTraffic, congestions: ['low', 'low', 'low', 'low'] })
+        .features,
+    ).toHaveLength(0);
+  });
+
+  it('agrupa trechos contíguos de mesmo nível; ignora "low"', () => {
+    const fc = buildCongestionGeojson(routeWithTraffic);
+    // Um feature "moderate" (1 segmento) + um feature "heavy" (2 segmentos).
+    expect(fc.features).toHaveLength(2);
+    expect(fc.features.map((f) => f.properties?.level)).toEqual(['moderate', 'heavy']);
+    const heavy = fc.features[1].geometry as unknown as { coordinates: [number, number][] };
+    expect(heavy.coordinates).toHaveLength(3); // 3 vértices = 2 segmentos
+  });
+
+  it('na navegação, começa no ponto projetado do veículo e ignora o que ficou para trás', () => {
+    // Veículo projetado no meio do 3º segmento (heavy), along ~ 277 m.
+    const projection = projectVehicleOntoRoute(routeWithTraffic, { lat: 0.0025, lng: 0 }, 2);
+    const fc = buildCongestionGeojson(routeWithTraffic, projection);
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0].properties?.level).toBe('heavy');
+    const coords = (fc.features[0].geometry as unknown as { coordinates: [number, number][] })
+      .coordinates;
+    // Primeiro ponto = projeção do veículo (~lat 0.0025), não o vértice 0.002.
+    expect(coords[0][1]).toBeCloseTo(0.0025, 4);
   });
 });
 

@@ -52,6 +52,76 @@ describe('getDirections', () => {
     expect(route.steps[0].instruction).toBe('Siga para o norte');
   });
 
+  it('converte a anotação de congestionamento em route.congestions (um nível por segmento)', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        routes: [
+          {
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+                [-46.628, -23.548],
+                [-46.626, -23.546],
+              ],
+            },
+            distance: 1200,
+            duration: 300,
+            legs: [
+              {
+                steps: [],
+                annotation: { congestion: ['low', 'heavy', 'severe'] },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const route = await getDirections(
+      { lng: -46.6333, lat: -23.5505 },
+      { lng: -46.626, lat: -23.546 },
+      'driving',
+    );
+
+    expect(route.congestions).toEqual(['low', 'heavy', 'severe']);
+  });
+
+  it('congestions fica vazio quando a API não manda anotação (perfil sem trânsito)', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 'Ok',
+        routes: [
+          {
+            geometry: {
+              coordinates: [
+                [-46.6333, -23.5505],
+                [-46.63, -23.55],
+              ],
+            },
+            distance: 1200,
+            duration: 300,
+            legs: [{ steps: [] }],
+          },
+        ],
+      }),
+    });
+
+    const route = await getDirections(
+      { lng: -46.6333, lat: -23.5505 },
+      { lng: -46.63, lat: -23.55 },
+      'walking',
+    );
+
+    expect(route.congestions).toEqual([]);
+    const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(url).toContain('/directions/v5/mapbox/walking/');
+    expect(url).not.toContain('annotations=congestion');
+  });
+
   it('lança MapboxRequestError quando nenhuma rota é encontrada', async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
@@ -181,7 +251,7 @@ describe('getDirections', () => {
     expect(url).toContain('language=pt');
   });
 
-  it('usa o perfil driving do Mapbox para o modo motorcycling, que não existe na API', async () => {
+  it('usa o perfil driving-traffic do Mapbox para o modo motorcycling, que não existe na API', async () => {
     (fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -209,7 +279,8 @@ describe('getDirections', () => {
     );
 
     const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-    expect(url).toContain('/directions/v5/mapbox/driving/');
+    expect(url).toContain('/directions/v5/mapbox/driving-traffic/');
+    expect(url).toContain('annotations=congestion');
   });
 
   it('pede banner_instructions na URL', async () => {

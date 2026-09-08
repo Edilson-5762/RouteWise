@@ -1,5 +1,6 @@
 import type {
   BannerInstruction,
+  CongestionLevel,
   Coordinates,
   ManeuverLane,
   Route,
@@ -65,6 +66,9 @@ interface DirectionsStep {
 
 interface DirectionsLeg {
   steps: DirectionsStep[];
+  annotation?: {
+    congestion?: string[];
+  };
 }
 
 interface DirectionsRoute {
@@ -80,14 +84,32 @@ interface DirectionsResponse {
 }
 
 // A API de Directions do Mapbox não tem um perfil dedicado para motos;
-// `driving` é o mais próximo (uso de vias veiculares), então mapeamos aqui
-// mantendo `motorcycling` como perfil interno para UI, ETA e ícone distintos.
+// `driving-traffic` é o mais próximo (uso de vias veiculares) e traz o trânsito
+// em tempo real — mantemos `motorcycling` como perfil interno para UI, ETA e
+// ícone distintos. `driving-traffic` é também o único perfil que devolve as
+// anotações de congestionamento (ver `annotations=congestion` abaixo).
 const MAPBOX_DIRECTIONS_PROFILE: Record<TravelProfile, string> = {
-  driving: 'driving',
-  motorcycling: 'driving',
+  driving: 'driving-traffic',
+  motorcycling: 'driving-traffic',
   walking: 'walking',
   cycling: 'cycling',
 };
+
+// Perfis que suportam a anotação de congestionamento — pedir `congestion` num
+// perfil a pé/bike faz a Directions responder com erro.
+const TRAFFIC_PROFILES = new Set(['driving-traffic']);
+
+const CONGESTION_LEVELS = new Set<CongestionLevel>([
+  'unknown',
+  'low',
+  'moderate',
+  'heavy',
+  'severe',
+]);
+
+function toCongestionLevel(raw: string): CongestionLevel {
+  return CONGESTION_LEVELS.has(raw as CongestionLevel) ? (raw as CongestionLevel) : 'unknown';
+}
 
 function toBannerInstruction(raw: BannerInstructionRaw, step: DirectionsStep): BannerInstruction {
   const lanes: ManeuverLane[] = (raw.sub?.components ?? [])
@@ -114,7 +136,12 @@ export async function getDirections(
   profile: TravelProfile,
 ): Promise<Route> {
   const coordinates = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
-  const url = `${DIRECTIONS_BASE_URL}/${MAPBOX_DIRECTIONS_PROFILE[profile]}/${coordinates}?geometries=geojson&steps=true&banner_instructions=true&overview=full&language=pt&access_token=${MAPBOX_TOKEN}`;
+  const mapboxProfile = MAPBOX_DIRECTIONS_PROFILE[profile];
+  // `annotations=congestion` devolve, por segmento da geometria, o nível de
+  // trânsito ("low".."severe") — usado para pintar a faixa vermelha sobre a
+  // rota. Só em perfil com trânsito; nos demais a Directions rejeitaria o pedido.
+  const annotationsParam = TRAFFIC_PROFILES.has(mapboxProfile) ? '&annotations=congestion' : '';
+  const url = `${DIRECTIONS_BASE_URL}/${mapboxProfile}/${coordinates}?geometries=geojson&steps=true&banner_instructions=true&overview=full${annotationsParam}&language=pt&access_token=${MAPBOX_TOKEN}`;
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -145,10 +172,19 @@ export async function getDirections(
     })),
   );
 
+  // Um nível de congestionamento por segmento da geometria. A anotação vem por
+  // leg; concatenamos na ordem (só temos 1 leg: origem→destino). Se a API não
+  // mandou (perfil sem trânsito, ou trecho sem cobertura), fica vazio e a
+  // camada da faixa vermelha simplesmente não desenha nada.
+  const congestions: CongestionLevel[] = mapboxRoute.legs.flatMap((leg) =>
+    (leg.annotation?.congestion ?? []).map(toCongestionLevel),
+  );
+
   return {
     geometry: mapboxRoute.geometry.coordinates.map(([lng, lat]) => ({ lng, lat })),
     steps,
     distanceMeters: mapboxRoute.distance,
     durationSeconds: mapboxRoute.duration,
+    congestions,
   };
 }

@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
-import type { Coordinates, Route } from '../../types';
+import type { CongestionLevel, Coordinates, Route } from '../../types';
 import {
   bearingBetween,
   findNearestPointIndex,
@@ -338,6 +338,69 @@ export function buildManeuverArrowGeojson(
   };
 
   return { type: 'FeatureCollection', features: [shapeFeature, headFeature] };
+}
+
+// Níveis de trânsito que ganham faixa colorida por cima da rota. "low" e
+// "unknown" (fluxo normal / sem dado) não desenham nada — a linha azul basta.
+const CONGESTION_DRAW_LEVELS = new Set<CongestionLevel>(['moderate', 'heavy', 'severe']);
+
+// Faixa colorida SOBRE a linha azul marcando trânsito lento/parado, no estilo
+// Waze/Google Maps. Recebe `route.congestions` (um nível por segmento da
+// geometria) e emite uma LineString por trecho contíguo de mesmo nível
+// desenhável. Durante a navegação, `projection` corta tudo que já ficou para
+// trás — a faixa começa exatamente no veículo. Sem dados de trânsito (a pé, ou
+// trecho sem cobertura) volta vazia e a camada não desenha nada.
+export function buildCongestionGeojson(
+  route: Route | null,
+  projection?: RouteProjection | null,
+): FeatureCollection {
+  const levels = route?.congestions;
+  if (!route || !levels || levels.length === 0 || route.geometry.length < 2) {
+    return EMPTY_POINT_COLLECTION;
+  }
+
+  const coords: [number, number][] = route.geometry.map((p) => [p.lng, p.lat]);
+  // Segmento `i` liga coords[i] a coords[i+1]. Na navegação começamos no
+  // segmento em que o veículo está projetado; no planejamento, do início.
+  const startSegment = projection ? Math.max(0, projection.segmentIndex) : 0;
+
+  const features: Feature<LineString>[] = [];
+  let run: [number, number][] = [];
+  let runLevel: CongestionLevel | null = null;
+
+  const flush = () => {
+    if (run.length >= 2 && runLevel) {
+      features.push({
+        type: 'Feature',
+        properties: { level: runLevel },
+        geometry: { type: 'LineString', coordinates: run },
+      });
+    }
+    run = [];
+    runLevel = null;
+  };
+
+  const lastSegment = Math.min(coords.length - 1, levels.length);
+  for (let i = startSegment; i < lastSegment; i += 1) {
+    const level = levels[i];
+    if (!CONGESTION_DRAW_LEVELS.has(level)) {
+      flush();
+      continue;
+    }
+    if (runLevel !== level) {
+      flush();
+      // O primeiro trecho desenhado na navegação começa no ponto projetado do
+      // veículo (em cima da pista), não no vértice anterior atrás dele.
+      const from: [number, number] =
+        i === startSegment && projection ? [projection.point.lng, projection.point.lat] : coords[i];
+      run = [from];
+      runLevel = level;
+    }
+    run.push(coords[i + 1]);
+  }
+  flush();
+
+  return features.length > 0 ? { type: 'FeatureCollection', features } : EMPTY_POINT_COLLECTION;
 }
 
 // Projeção do veículo sobre a rota, restrita a uma janela ESTREITA em torno do
