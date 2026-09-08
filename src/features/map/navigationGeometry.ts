@@ -129,26 +129,30 @@ export function buildRouteGeojson(
   return lineFeature(coordinates);
 }
 
-// Abaixo desta folga entre o fim da rota e o pino, não há trecho final a
-// mostrar — a rota já termina praticamente no destino. 8 m (era 20): num teste
-// em rua o pino de uma UBS caiu ~10 m para dentro da quadra e o tracejado não
-// aparecia. Precisa bater com FINAL_APPROACH_MIN_GAP_METERS no reducer.
-export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 8;
+// Folga (fim-da-rota→pino) em que o tracejado faz sentido: de 3 m (abaixo é um
+// "pontinho" degenerado) a 25 m (acima, uma reta longa cruzando o quarteirão
+// engana). Precisa bater com FINAL_APPROACH_MIN_GAP_METERS/_TRIGGER_METERS no
+// reducer — quem de fato liga/desliga o modo é `active` (finalApproachMeters).
+export const DESTINATION_CONNECTOR_MIN_GAP_METERS = 3;
+export const DESTINATION_CONNECTOR_MAX_GAP_METERS = 25;
 
 // "Trecho final": a Directions termina na via, mas o pino pode ficar dezenas de
 // metros adentro (rampa, estacionamento, dentro do quarteirão). Este é um
 // segmento reto do FIM da geometria da rota até o pino, desenhado tracejado —
-// "continue daqui até o destino". Vazio quando não há rota/pino ou quando a
-// folga é pequena demais para valer a pena.
+// "continue daqui até o destino". Só aparece quando `active` (o app está no modo
+// de aproximação: rota concluída + usuário a <= 25 m do pino). Vazio também sem
+// rota/pino ou com folga pequena demais para valer um traço.
 export function buildDestinationConnectorGeojson(
   route: Route | null,
   destination: Coordinates | null,
+  active = true,
 ): FeatureCollection {
-  if (!route || !destination || route.geometry.length === 0) {
+  if (!active || !route || !destination || route.geometry.length === 0) {
     return EMPTY_POINT_COLLECTION;
   }
   const end = route.geometry[route.geometry.length - 1];
-  if (haversineDistanceMeters(end, destination) < DESTINATION_CONNECTOR_MIN_GAP_METERS) {
+  const gap = haversineDistanceMeters(end, destination);
+  if (gap < DESTINATION_CONNECTOR_MIN_GAP_METERS || gap > DESTINATION_CONNECTOR_MAX_GAP_METERS) {
     return EMPTY_POINT_COLLECTION;
   }
   return {

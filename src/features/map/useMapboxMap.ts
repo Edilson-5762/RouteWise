@@ -708,7 +708,11 @@ export function useMapboxMap({
       distanceToManeuverMetersRef.current,
       originRef.current,
     );
-    const connectorGeojson = buildDestinationConnectorGeojson(route, destination);
+    const connectorGeojson = buildDestinationConnectorGeojson(
+      route,
+      destination,
+      finalApproachRef.current,
+    );
     const congestionGeojson = buildCongestionGeojson(
       route,
       isNavigating ? (lastProjectionRef.current ?? projectVehicle(originRef.current)) : null,
@@ -962,12 +966,23 @@ export function useMapboxMap({
     if (congestionSource) {
       congestionSource.setData(buildCongestionGeojson(route, isNavigating ? projection : null));
     }
+    // Tracejado fim-da-rota→pino: só desenha no modo de aproximação (usuário a
+    // <= 25 m do pino — ver finalApproachMeters no reducer). Reavaliado a cada
+    // fix, junto com a transição de `finalApproach`.
+    const connectorSource = map.getSource(DEST_CONNECTOR_SOURCE_ID) as
+      mapboxgl.GeoJSONSource | undefined;
+    if (connectorSource) {
+      connectorSource.setData(
+        buildDestinationConnectorGeojson(route, destinationRef.current, finalApproachRef.current),
+      );
+    }
   }, [
     route,
     origin,
     isNavigating,
     currentStepIndex,
     distanceToManeuverMeters,
+    finalApproach,
     projectVehicle,
     updateDriveAnchor,
   ]);

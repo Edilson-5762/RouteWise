@@ -21,16 +21,14 @@ const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
 // Quão perto do fim da rota já conta como "rota concluída" (entra no trecho
 // final se o pino ainda estiver adiante).
 const ARRIVAL_ALONG_SLACK_METERS = 20;
-// A partir desta folga entre o FIM DA ROTA e o pino, o trajeto tem "trecho
-// final": ao concluir a rota o app entra no modo de aproximação (tracejado +
-// contagem "Continue X m") e só confirma a chegada ao encostar no pino. Abaixo
-// disso a rota já termina praticamente no destino — chegada normal. (Mesmo
-// valor de DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer
-// não importa de lá para não depender do módulo de mapa.)
-// 8 m (era 20): num teste em rua o pino de uma UBS caiu ~10 m para dentro da
-// quadra e nem o tracejado nem o "Continue X m" apareciam. 8 m ainda evita um
-// tracejado inútil quando a rota já termina em cima do destino.
-const FINAL_APPROACH_MIN_GAP_METERS = 8;
+// Modo "trecho final" (tracejado do fim da rota até o pino + contagem
+// "Continue X m até o destino"): liga quando a rota termina e o pino está DENTRO
+// de FINAL_APPROACH_TRIGGER_METERS do fim da rota — "cheguei num lugar e o pino
+// está a <= 25 m". Passou de 25 m NÃO liga (uma reta tracejada cruzando meio
+// quarteirão até um pino longe engana mais do que ajuda). Abaixo de
+// FINAL_APPROACH_MIN_GAP_METERS também não liga: a rota já termina no destino.
+const FINAL_APPROACH_MIN_GAP_METERS = 3;
+const FINAL_APPROACH_TRIGGER_METERS = 25;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
@@ -273,11 +271,10 @@ export function navigationReducer(
         routeDeviated = false;
       }
 
-      // Trecho final: a rota (na via) acabou mas o pino fica adentro (folga
-      // FIM-DA-ROTA→pino >= FINAL_APPROACH_MIN_GAP_METERS) e ainda não chegou →
-      // segue a distância em linha reta até o pino ("Continue X m até o
+      // Trecho final: a rota (na via) acabou e o pino ficou de 3 a 25 m do fim
+      // dela → segue a distância em linha reta até o pino ("Continue X m até o
       // destino" + tracejado + ícone andando pelo tracejado). Continua até
-      // `arrived`.
+      // `arrived`. Folga > 25 m: não liga (reta tracejada longa engana).
       const routeComplete =
         alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS;
       const routeEndPin =
@@ -285,7 +282,11 @@ export function navigationReducer(
           ? haversineDistanceMeters(geometry[geometry.length - 1], state.destination)
           : 0;
       const finalApproachMeters =
-        routeComplete && routeEndPin >= FINAL_APPROACH_MIN_GAP_METERS ? distanceToDestination : null;
+        routeComplete &&
+        routeEndPin >= FINAL_APPROACH_MIN_GAP_METERS &&
+        routeEndPin <= FINAL_APPROACH_TRIGGER_METERS
+          ? distanceToDestination
+          : null;
 
       return {
         ...state,

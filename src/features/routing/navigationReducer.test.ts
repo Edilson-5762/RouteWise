@@ -110,10 +110,10 @@ describe('navigationReducer', () => {
     expect(chegou.status).toBe('arrived');
   });
 
-  it('rota que termina longe do pino: NÃO confirma chegada a dezenas de metros — só ao encostar no pino', () => {
-    // Caso do Atacadão: a rota (Directions) termina na via, o pino fica ~55 m
-    // adentro. Chegar ao fim da linha azul (mesmo parado) NÃO é chegada — o
-    // trecho final guia até encostar no pino.
+  it('rota termina a > 25 m do pino: sem modo de aproximação, mas ainda NÃO confirma chegada longe', () => {
+    // Folga fim-da-rota→pino ~55 m: acima de 25 m, então NADA de tracejado /
+    // "Continue X m" (uma reta longa cruzando o quarteirão engana). Mas a
+    // chegada continua só valendo ao encostar no pino.
     const planned = navigationReducer(
       { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
       { type: 'ROUTE_PLANNED', route: sampleRoute },
@@ -126,7 +126,7 @@ describe('navigationReducer', () => {
       speedMetersPerSecond: 0,
     });
     expect(noFimDaLinha.status).toBe('navigating');
-    expect(noFimDaLinha.finalApproachMeters).not.toBeNull();
+    expect(noFimDaLinha.finalApproachMeters).toBeNull();
 
     const noPino = navigationReducer(noFimDaLinha, {
       type: 'POSITION_UPDATED',
@@ -137,33 +137,28 @@ describe('navigationReducer', () => {
     expect(noPino.finalApproachMeters).toBeNull();
   });
 
-  it('trecho final: passar em movimento ou PARAR a dezenas de metros do pino não confirma; encostar sim', () => {
+  it('rota termina de 3 a 25 m do pino: liga o modo de aproximação até encostar', () => {
+    // Caso da UBS: a rota termina na via, o pino ~17 m adentro (<= 25 m) →
+    // tracejado + "Continue X m"; a chegada só ao encostar no pino.
     const planned = navigationReducer(
-      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.00015 } },
       { type: 'ROUTE_PLANNED', route: sampleRoute },
     );
     const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
 
-    const passandoRapido = navigationReducer(navigating, {
+    const noFimDaLinha = navigationReducer(navigating, {
       type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3 },
+      position: { lat: 0, lng: 3 }, // fim da linha, ~17 m do pino, em movimento
       speedMetersPerSecond: 8,
     });
-    expect(passandoRapido.status).toBe('navigating');
-    expect(passandoRapido.finalApproachMeters).toBeGreaterThan(40);
-    expect(passandoRapido.finalApproachMeters).toBeLessThan(70);
+    expect(noFimDaLinha.status).toBe('navigating');
+    expect(noFimDaLinha.finalApproachMeters).toBeGreaterThan(10);
+    expect(noFimDaLinha.finalApproachMeters).toBeLessThan(25);
 
-    const parouLonge = navigationReducer(passandoRapido, {
+    const encostou = navigationReducer(noFimDaLinha, {
       type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3 }, // parou no fim da linha, ~55 m do pino
-      speedMetersPerSecond: 0.3,
-    });
-    expect(parouLonge.status).toBe('navigating');
-
-    const encostou = navigationReducer(parouLonge, {
-      type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3.00047 }, // ~3 m do pino
-      speedMetersPerSecond: 0.3,
+      position: { lat: 0, lng: 3.00014 }, // ~1 m do pino
+      speedMetersPerSecond: 8,
     });
     expect(encostou.status).toBe('arrived');
     expect(encostou.finalApproachMeters).toBeNull();

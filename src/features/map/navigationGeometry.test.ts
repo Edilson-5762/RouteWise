@@ -286,37 +286,40 @@ describe('buildDestinationConnectorGeojson', () => {
     durationSeconds: 20,
   };
 
+  const pinoDezMetros = { lat: 0, lng: 0.00099 }; // ~10 m do fim da rota
+
   it('sem rota ou sem pino → vazio', () => {
     expect(buildDestinationConnectorGeojson(null, { lat: 0, lng: 0 }).features).toHaveLength(0);
     expect(buildDestinationConnectorGeojson(routeEndingShortOfPin, null).features).toHaveLength(0);
   });
 
-  it('pino dentro da folga mínima (< 8 m) → vazio (não vale a pena)', () => {
+  it('active=false (fora do modo de aproximação) → vazio, mesmo com folga válida', () => {
+    expect(
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoDezMetros, false).features,
+    ).toHaveLength(0);
+  });
+
+  it('pino a menos de 3 m do fim da rota → vazio (rota já termina no destino)', () => {
     const pinoColado = { lat: 0, lng: 0.00091 }; // ~1 m do fim
-    const pinoCincoMetros = { lat: 0, lng: 0.000945 }; // ~5 m do fim
     expect(
       buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoColado).features,
     ).toHaveLength(0);
+  });
+
+  it('pino a mais de 25 m do fim da rota → vazio (reta tracejada longa engana)', () => {
+    const pinoLonge = { lat: 0.0004, lng: 0.0011 }; // ~49 m do fim
     expect(
-      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoCincoMetros).features,
+      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoLonge).features,
     ).toHaveLength(0);
   });
 
-  it('pino ~10 m para dentro da quadra → já mostra o tracejado (teste em rua: UBS)', () => {
-    const pinoDezMetros = { lat: 0, lng: 0.00099 }; // ~10 m do fim
-    expect(
-      buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoDezMetros).features,
-    ).toHaveLength(1);
-  });
-
-  it('pino dezenas de metros adentro → um segmento do fim da rota até o pino', () => {
-    const pinoAdentro = { lat: 0.0004, lng: 0.0011 }; // ~50 m adiante/ao lado
-    const fc = buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoAdentro);
+  it('pino entre 3 e 25 m do fim (teste em rua: UBS ~10 m adentro) → um segmento fim-da-rota→pino', () => {
+    const fc = buildDestinationConnectorGeojson(routeEndingShortOfPin, pinoDezMetros);
     expect(fc.features).toHaveLength(1);
     const coords = (fc.features[0].geometry as unknown as { coordinates: [number, number][] })
       .coordinates;
     expect(coords[0]).toEqual([0.0009, 0]); // começa no fim da rota
-    expect(coords[coords.length - 1]).toEqual([0.0011, 0.0004]); // termina no pino
+    expect(coords[coords.length - 1]).toEqual([0.00099, 0]); // termina no pino
   });
 });
 
