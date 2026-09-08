@@ -52,7 +52,16 @@ export interface DriveStepInput {
 
 export interface DriveStepOutput {
   center: Coordinates;
+  /** Rumo da CÂMERA (suavizado) — o quanto o mapa girou neste quadro. */
   bearingDegrees: number;
+  /**
+   * Rumo de DESLOCAMENTO do veículo (rota à frente, sem a suavização da
+   * câmera). Numa curva fechada a câmera fica para trás dele por um instante;
+   * `bearingDegrees - vehicleBearingDegrees` é o quanto o ícone do carro deve
+   * pivotar na tela (Waze: o carro vira a frente na quina, o mapa alcança
+   * depois).
+   */
+  vehicleBearingDegrees: number;
   paddingTopPx: number;
   renderedAlongMeters: number;
   lineProjection: RouteProjection;
@@ -142,6 +151,7 @@ export function computeDriveStep(input: DriveStepInput): DriveStepOutput | null 
   return {
     center: loc.point,
     bearingDegrees,
+    vehicleBearingDegrees: (targetBearing + 360) % 360,
     // O centro do mapa cai a (0.5 + ratio) da altura da tela — mesma posição do
     // ícone fixo do veículo em MapView. `padding` não roda com o bearing (ao
     // contrário do antigo `offset` do easeTo), então a linha encosta no ícone em

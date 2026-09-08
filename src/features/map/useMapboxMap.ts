@@ -67,6 +67,10 @@ const PROGRESS_MAX_RECEDE_SEGMENTS = 12;
 // Depois de um gesto do usuário durante a navegação, quanto tempo até a câmera
 // voltar a seguir sozinha (igual Waze).
 const RESUME_FOLLOW_DELAY_MS = 4000;
+// Pivô máximo (graus) do ícone do carro na tela quando a câmera fica atrás do
+// rumo do veículo numa curva. ~100° cobre uma curva fechada em "L"; além disso
+// é ruído de um quadro ruim e não deve rodar o ícone.
+const NAV_PUCK_MAX_PIVOT_DEGREES = 100;
 
 interface UseMapboxMapOptions {
   containerRef: RefObject<HTMLDivElement>;
@@ -82,6 +86,10 @@ interface UseMapboxMapOptions {
   travelProfile: TravelProfile;
   speedMetersPerSecond: number | null;
   chromeInsets?: MapChromeInsets;
+  // Ícone FIXO do veículo na navegação (desenhado por MapView). O laço rAF gira
+  // ELE na tela quando a câmera fica para trás do rumo do carro numa curva
+  // fechada — o carro "vira a frente" na quina, estilo Waze.
+  navVehicleIconRef?: RefObject<HTMLElement | null>;
 }
 
 const DEFAULT_CHROME_INSETS: MapChromeInsets = { top: 0, bottom: 0 };
@@ -169,6 +177,7 @@ export function useMapboxMap({
   travelProfile,
   speedMetersPerSecond,
   chromeInsets = DEFAULT_CHROME_INSETS,
+  navVehicleIconRef,
 }: UseMapboxMapOptions) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const originMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -1025,6 +1034,22 @@ export function useMapboxMap({
           smoothedBearingRef.current = step.bearingDegrees;
           lastProjectionRef.current = step.lineProjection;
 
+          // Pivô do ícone do carro na tela: o quanto o rumo do veículo está à
+          // frente do rumo (atrasado) da câmera. Numa curva fechada o carro
+          // "vira a frente" na quina e volta a apontar para cima quando o mapa
+          // alcança. Limitado para um quadro ruim não rodar o ícone à toa.
+          const iconEl = navVehicleIconRef?.current;
+          if (iconEl) {
+            const pivot = Math.max(
+              -NAV_PUCK_MAX_PIVOT_DEGREES,
+              Math.min(
+                NAV_PUCK_MAX_PIVOT_DEGREES,
+                signedBearingDelta(step.bearingDegrees, step.vehicleBearingDegrees),
+              ),
+            );
+            iconEl.style.transform = `rotate(${pivot.toFixed(1)}deg)`;
+          }
+
           // Pula o jumpTo se nada mudou de forma perceptível desde o último
           // aplicado — com o veículo parado, a câmera assenta e o laço deixa de
           // emitir eventos, devolvendo a thread para a UI (botões voltam a
@@ -1091,7 +1116,7 @@ export function useMapboxMap({
         rafIdRef.current = null;
       }
     };
-  }, [isNavigating, route, containerRef]);
+  }, [isNavigating, route, containerRef, navVehicleIconRef]);
 
   // Uma rota nova (plano/recálculo) recomeça o progresso do zero.
   useEffect(() => {

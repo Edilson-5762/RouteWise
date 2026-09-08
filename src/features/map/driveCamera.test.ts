@@ -178,6 +178,25 @@ describe('computeDriveStep', () => {
       const b = stepAt(cornerAlong + 30, undefined)!;
       expect(a.bearingDegrees).toBeCloseTo(b.bearingDegrees, 6);
     });
+
+    it('logo após a quina, o rumo do VEÍCULO já é a perna nova enquanto a CÂMERA ainda está atrás — a diferença é o pivô do ícone do carro', () => {
+      const step = computeDriveStep({
+        geometry: elle,
+        routeLengthMeters: elleLen,
+        anchor: { alongMeters: cornerAlong + 5, atMs: 1000, speedMps: 8 },
+        nowMs: 1000,
+        renderedAlongMeters: cornerAlong + 5,
+        smoothedBearingDegrees: 0, // câmera ainda apontando norte (perna antiga)
+        headingDegrees: null,
+        clientHeightPx: 800,
+        maneuverAlongMeters: cornerAlong,
+      })!;
+      // Veículo já "de frente" para a perna nova (~leste).
+      expect(step.vehicleBearingDegrees).toBeGreaterThan(70);
+      expect(step.vehicleBearingDegrees).toBeLessThan(110);
+      // Câmera mal saiu do norte (só ~9% do caminho num quadro).
+      expect(step.bearingDegrees).toBeLessThan(20);
+    });
   });
 
   it('deriva o padding.top da altura da tela para o centro cair a 80% (ratio 0.3)', () => {

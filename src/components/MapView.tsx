@@ -44,6 +44,7 @@ export function MapView({
   onDestinationSelected,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const navVehicleIconRef = useRef<HTMLDivElement>(null);
   const { mapInstance, isFollowingUser, recenter } = useMapboxMap({
     containerRef,
     origin,
@@ -58,6 +59,7 @@ export function MapView({
     travelProfile,
     speedMetersPerSecond,
     chromeInsets,
+    navVehicleIconRef,
   });
 
   // Sempre habilitado (planejamento, rota traçada e navegação) — ver spec
@@ -83,8 +85,10 @@ export function MapView({
           em que a câmera centraliza o ponto do veículo projetado sobre a rota
           (NAV_PUCK_VERTICAL_OFFSET_RATIO). Como não é um marcador do mapa, ele
           não se move na tela — o mapa é que rola por baixo, sem os "coices"
-          para frente. Aponta sempre para cima porque a câmera já gira o mapa
-          para a direção da rua à frente (visão "atrás do veículo" do Waze). */}
+          para frente. Em reta aponta para cima (a câmera já gira o mapa para a
+          rua à frente); numa curva fechada o wrapper interno é girado pelo laço
+          rAF para o carro "virar a frente" na quina antes de a câmera alcançar
+          (estilo Waze). */}
       {isNavigating && (
         <div
           data-testid="nav-vehicle"
@@ -96,10 +100,12 @@ export function MapView({
             filter: 'drop-shadow(0 3px 6px rgba(0,0,0,0.55))',
           }}
         >
-          <div
-            style={{ width: NAV_VEHICLE_ICON_PX, height: NAV_VEHICLE_ICON_PX }}
-            dangerouslySetInnerHTML={{ __html: navVehicleMarkup }}
-          />
+          <div ref={navVehicleIconRef} style={{ transition: 'transform 120ms linear' }}>
+            <div
+              style={{ width: NAV_VEHICLE_ICON_PX, height: NAV_VEHICLE_ICON_PX }}
+              dangerouslySetInnerHTML={{ __html: navVehicleMarkup }}
+            />
+          </div>
         </div>
       )}
 
