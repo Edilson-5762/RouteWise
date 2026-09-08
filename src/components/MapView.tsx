@@ -91,8 +91,13 @@ export function MapView({
           para frente. Em reta aponta para cima (a câmera já gira o mapa para a
           rua à frente); numa curva fechada o wrapper interno é girado pelo laço
           rAF para o carro "virar a frente" na quina antes de a câmera alcançar
-          (estilo Waze). */}
-      {isNavigating && (
+          (estilo Waze).
+          Só enquanto a câmera está SEGUINDO o usuário: quando ele arrasta o
+          mapa (isFollowingUser = false) a câmera congela, e um ícone preso à
+          tela descolaria do início da linha azul. Nesse momento quem mostra o
+          veículo é o marcador ancorado no mapa (useMapboxMap), que anda junto
+          com o mapa e continua grudado no começo da rota, igual ao Waze. */}
+      {isNavigating && isFollowingUser && (
         <div
           data-testid="nav-vehicle"
           aria-hidden="true"

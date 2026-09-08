@@ -462,6 +462,13 @@ export function useMapboxMap({
       return;
     }
 
+    // Durante a navegação o marcador do mapa fica escondido (o veículo é o ícone
+    // FIXO da tela) — MAS ele reaparece assim que o usuário arrasta o mapa, e aí
+    // precisa estar EXATAMENTE no início do trecho azul que falta (a projeção do
+    // veículo sobre a rota), não no GPS cru, para "colar" na linha como no Waze.
+    const puckLngLat =
+      isNavigating && lastProjectionRef.current ? lastProjectionRef.current.point : origin;
+
     if (!originMarkerRef.current) {
       const { element, iconContainer, speedBadge } = createPuckElement(travelProfileRef.current);
       puckElementRef.current = element;
@@ -472,10 +479,10 @@ export function useMapboxMap({
         rotationAlignment: 'map',
         pitchAlignment: 'map',
       })
-        .setLngLat([origin.lng, origin.lat])
+        .setLngLat([puckLngLat.lng, puckLngLat.lat])
         .addTo(map);
     } else {
-      originMarkerRef.current.setLngLat([origin.lng, origin.lat]);
+      originMarkerRef.current.setLngLat([puckLngLat.lng, puckLngLat.lat]);
     }
     // Só gira o puck quando o GPS reporta um heading real. `heading` vem NaN
     // (já normalizado para null em useGeolocation) sempre que o dispositivo
@@ -521,13 +528,21 @@ export function useMapboxMap({
   // MapView por cima do mapa (ver `NAV_PUCK_VERTICAL_OFFSET_RATIO`) — isso é o
   // que faz o carro ficar parado na tela enquanto o mapa rola por baixo, sem os
   // "coices" que dava quando o marcador (posição instantânea) corria à frente
-  // da câmera (animada). Aqui só escondemos o marcador do mapa nesse modo; no
-  // planejamento ele volta, mostrando a posição real sobre a prévia da rota.
+  // da câmera (animada).
+  //
+  // A EXCEÇÃO é quando o usuário arrasta o mapa (isFollowingUser = false): a
+  // câmera congela, então o ícone fixo da tela ficaria "preso" na altura de
+  // sempre enquanto a linha azul desliza embaixo — o carro descolava do início
+  // da rota. Nesse momento voltamos ao marcador ANCORADO no mapa (posicionado
+  // na projeção sobre a rota, no efeito acima): ele anda junto com o mapa e
+  // permanece grudado no início do trecho azul, igual ao Waze. MapView, por sua
+  // vez, esconde o ícone fixo enquanto `!isFollowingUser`.
   useEffect(() => {
     if (puckElementRef.current) {
-      puckElementRef.current.style.visibility = isNavigating ? 'hidden' : 'visible';
+      const hiddenBehindFixedIcon = isNavigating && isFollowingUser;
+      puckElementRef.current.style.visibility = hiddenBehindFixedIcon ? 'hidden' : 'visible';
     }
-  }, [isNavigating, origin]);
+  }, [isNavigating, isFollowingUser, origin]);
 
   // Mantém o selo "X km/h" do puck em dia com o que o GPS reporta — sempre
   // visível, com "0 km/h" antes de qualquer velocidade real ser reportada,
@@ -833,6 +848,13 @@ export function useMapboxMap({
     if (isNavigating) {
       lastProjectionRef.current = projection;
       updateDriveAnchor(projection);
+      // Mantém o marcador ancorado do veículo no início do trecho azul que falta
+      // (mesma projeção que a linha acabou de usar). Fica escondido atrás do
+      // ícone fixo enquanto a câmera segue, mas aparece já no lugar certo assim
+      // que o usuário arrasta o mapa — sem um "salto" de um fix de GPS de atraso.
+      if (projection && originMarkerRef.current) {
+        originMarkerRef.current.setLngLat([projection.point.lng, projection.point.lat]);
+      }
     }
     const source = map.getSource(ROUTE_SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (source) {

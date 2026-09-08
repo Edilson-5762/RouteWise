@@ -143,6 +143,37 @@ describe('MapView', () => {
     expect(screen.queryByLabelText('Centralizar')).not.toBeInTheDocument();
   });
 
+  it('troca o ícone fixo do veículo pelo marcador do mapa enquanto o usuário arrasta na navegação', () => {
+    movestartHandler = null;
+    render(
+      <MapView
+        origin={{ lat: -23.5505, lng: -46.6333 }}
+        destination={null}
+        route={null}
+        isNavigating
+        headingDegrees={null}
+        theme="light"
+        travelProfile="driving"
+        speedMetersPerSecond={null}
+        onDestinationSelected={vi.fn()}
+      />,
+    );
+
+    // Seguindo o usuário: o veículo é o ícone FIXO da tela.
+    expect(screen.getByTestId('nav-vehicle')).toBeInTheDocument();
+
+    // Usuário arrasta o mapa → câmera congela → o ícone fixo sai de cena para o
+    // marcador ancorado no mapa (que fica grudado no início da linha azul).
+    act(() => {
+      movestartHandler?.({ originalEvent: { type: 'touchmove' } });
+    });
+    expect(screen.queryByTestId('nav-vehicle')).not.toBeInTheDocument();
+
+    // Volta a seguir → o ícone fixo reaparece.
+    fireEvent.click(screen.getByLabelText('Centralizar'));
+    expect(screen.getByTestId('nav-vehicle')).toBeInTheDocument();
+  });
+
   it('também mostra o botão de centralizar fora do modo navegação (prévia da rota), e some ao clicar', () => {
     // À la Waze/Google Maps: arrastar o mapa enquanto se olha a prévia da
     // rota (antes de "Iniciar navegação") também precisa oferecer um jeito
