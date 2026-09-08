@@ -20,6 +20,7 @@ interface MapViewProps {
   currentStepIndex?: number;
   routeProgressIndex?: number;
   distanceToManeuverMeters?: number | null;
+  finalApproach?: boolean;
   headingDegrees: number | null;
   theme: 'light' | 'dark';
   travelProfile: TravelProfile;
@@ -36,6 +37,7 @@ export function MapView({
   currentStepIndex,
   routeProgressIndex,
   distanceToManeuverMeters,
+  finalApproach,
   headingDegrees,
   theme,
   travelProfile,
@@ -54,6 +56,7 @@ export function MapView({
     currentStepIndex,
     routeProgressIndex,
     distanceToManeuverMeters,
+    finalApproach,
     headingDegrees,
     theme,
     travelProfile,

@@ -222,6 +222,7 @@ export function App() {
           currentStepIndex={state.currentStepIndex}
           routeProgressIndex={state.routeProgressIndex}
           distanceToManeuverMeters={state.distanceToManeuverMeters}
+          finalApproach={state.finalApproachMeters != null}
           headingDegrees={geolocation.headingDegrees}
           theme={theme}
           travelProfile={state.travelProfile}

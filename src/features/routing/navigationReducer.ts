@@ -7,26 +7,27 @@ import {
   signedBearingDelta,
 } from '../../utils/distance';
 
-// Chegada pelo pino: raio pequeno, já que o critério de "fim da rota" abaixo
-// cobre o caso comum de o GPS não bater exatamente no ponto do pino.
-const ARRIVAL_THRESHOLD_METERS = 25;
-// Chegada pelo fim da rota: quando já percorreu praticamente todo o trajeto
-// (dentro de ARRIVAL_ALONG_SLACK_METERS do fim) E está de fato perto do pino
-// (dentro de ARRIVAL_ALONG_MAX_METERS) — não depende de o fix cair no pino.
-const ARRIVAL_ALONG_SLACK_METERS = 20;
-const ARRIVAL_ALONG_MAX_METERS = 120;
-// A rota da Directions costuma terminar na via, mas o pino pode ficar dezenas
-// de metros adentro (rampa, estacionamento, dentro do quarteirão). Nesse caso a
-// chegada pelo "fim da rota" só vale quando o veículo REALMENTE parou lá — sem
-// isso o app anunciava "você chegou" com o usuário ainda a caminho, ao cruzar o
-// fim da linha azul. Velocidade desconhecida (campo ausente) conta como parado,
-// preservando o comportamento anterior.
+// Chegada só quando o veículo está DE FATO em cima do pino: o ícone do carro e
+// o pino vermelho praticamente colados na tela. Nada de "finalizou no meio da
+// rua" — enquanto não encostar, o trecho final continua guiando (linha
+// tracejada + "Continue X m até o destino").
+//  - <= AT_PIN: chegou, mesmo em movimento (passou por cima do pino).
+//  - <= NEAR_PIN_STOPPED: chegou se PAROU ali (estacionou o mais perto que dava).
+const ARRIVAL_AT_PIN_METERS = 8;
+const ARRIVAL_NEAR_PIN_STOPPED_METERS = 18;
+// Velocidade (m/s) abaixo da qual o veículo conta como parado. Velocidade
+// desconhecida (campo ausente) também conta como parado.
 const ARRIVAL_STOPPED_SPEED_MPS = 1.5;
-// Abaixo desta folga entre o fim da rota e o pino não há "trecho final" a
-// anunciar — a rota já termina praticamente no destino. (Mesmo valor de
-// DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer não importa
-// de lá para não depender do módulo de mapa.)
-const FINAL_APPROACH_MIN_METERS = 20;
+// Quão perto do fim da rota já conta como "rota concluída" (entra no trecho
+// final se o pino ainda estiver adiante).
+const ARRIVAL_ALONG_SLACK_METERS = 20;
+// A partir desta folga entre o FIM DA ROTA e o pino, o trajeto tem "trecho
+// final": ao concluir a rota o app entra no modo de aproximação (tracejado +
+// contagem "Continue X m") e só confirma a chegada ao encostar no pino. Abaixo
+// disso a rota já termina praticamente no destino — chegada normal. (Mesmo
+// valor de DESTINATION_CONNECTOR_MIN_GAP_METERS na camada de mapa; o reducer
+// não importa de lá para não depender do módulo de mapa.)
+const FINAL_APPROACH_MIN_GAP_METERS = 20;
 // Desvio angular mínimo (em relação à direção de chegada) para chamar o destino
 // de "à direita"/"à esquerda"; abaixo disso é "em frente".
 const ARRIVAL_SIDE_MIN_DEGREES = 18;
@@ -226,22 +227,18 @@ export function navigationReducer(
       }
       const distanceToManeuverMeters = Math.max(0, currentStepEndMeters - guidanceAlongMeters);
 
-      // Chegada: perto do pino, OU praticamente no fim da rota E de fato na
-      // região do destino (esse segundo critério não exige que o GPS bata no
-      // ponto exato do pino, que costuma cair no meio da rua).
+      // Chegada só quando o carro está DE FATO em cima do pino (ícones colados
+      // na tela): <= AT_PIN em movimento, ou <= NEAR_PIN se parou ali. Não há
+      // mais "chegou porque a linha azul acabou" — o trecho final guia até o
+      // pino.
       const distanceToDestination = state.destination
         ? haversineDistanceMeters(action.position, state.destination)
         : Infinity;
       const stoppedOrUnknownSpeed =
         (action.speedMetersPerSecond ?? 0) <= ARRIVAL_STOPPED_SPEED_MPS;
       const arrived =
-        // No pino (ou quase) — chegou, esteja em movimento ou não.
-        distanceToDestination < ARRIVAL_THRESHOLD_METERS ||
-        // Terminou a rota e está na região do destino, mas PAROU lá (senão
-        // ainda está a caminho, só cruzando o fim da linha).
-        (distanceToDestination < ARRIVAL_ALONG_MAX_METERS &&
-          alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS &&
-          stoppedOrUnknownSpeed);
+        distanceToDestination <= ARRIVAL_AT_PIN_METERS ||
+        (distanceToDestination <= ARRIVAL_NEAR_PIN_STOPPED_METERS && stoppedOrUnknownSpeed);
 
       if (arrived) {
         const travelBearing = state.origin ? bearingBetween(state.origin, action.position) : null;
@@ -273,15 +270,19 @@ export function navigationReducer(
         routeDeviated = false;
       }
 
-      // Trecho final: já percorreu a rota inteira (na via) mas o pino fica
-      // adentro e o veículo ainda não parou lá → mostra "Continue X m até o
-      // destino" no painel enquanto anda pelo tracejado.
+      // Trecho final: a rota (na via) acabou mas o pino fica adentro (folga
+      // FIM-DA-ROTA→pino >= FINAL_APPROACH_MIN_GAP_METERS) e ainda não chegou →
+      // segue a distância em linha reta até o pino ("Continue X m até o
+      // destino" + tracejado + ícone andando pelo tracejado). Continua até
+      // `arrived`.
       const routeComplete =
         alongRouteMeters >= state.route.distanceMeters - ARRIVAL_ALONG_SLACK_METERS;
+      const routeEndPin =
+        state.destination && geometry.length > 0
+          ? haversineDistanceMeters(geometry[geometry.length - 1], state.destination)
+          : 0;
       const finalApproachMeters =
-        routeComplete && distanceToDestination >= FINAL_APPROACH_MIN_METERS
-          ? distanceToDestination
-          : null;
+        routeComplete && routeEndPin >= FINAL_APPROACH_MIN_GAP_METERS ? distanceToDestination : null;
 
       return {
         ...state,

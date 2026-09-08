@@ -10,6 +10,7 @@ import {
   travelBearingAlong,
   polylineLengthMeters,
   findNearestPointIndex,
+  projectOntoRoute,
   type RouteProjection,
 } from '../../utils/distance';
 import {
@@ -90,6 +91,11 @@ interface UseMapboxMapOptions {
   // ELE na tela quando a câmera fica para trás do rumo do carro numa curva
   // fechada — o carro "vira a frente" na quina, estilo Waze.
   navVehicleIconRef?: RefObject<HTMLElement | null>;
+  // Trecho final: a rota (via) acabou e o veículo segue pelo tracejado até o
+  // pino. Nesse modo a câmera acompanha o GPS cru ao longo do tracejado (não a
+  // projeção na rota, que ficaria travada no fim da linha) — o pino "desce" até
+  // o ícone do carro e só então a chegada confirma.
+  finalApproach?: boolean;
 }
 
 const DEFAULT_CHROME_INSETS: MapChromeInsets = { top: 0, bottom: 0 };
@@ -178,6 +184,7 @@ export function useMapboxMap({
   speedMetersPerSecond,
   chromeInsets = DEFAULT_CHROME_INSETS,
   navVehicleIconRef,
+  finalApproach = false,
 }: UseMapboxMapOptions) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const originMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -200,6 +207,10 @@ export function useMapboxMap({
   // reajustar fitBounds/layers a cada tick de GPS.
   const originRef = useRef(origin);
   originRef.current = origin;
+  const destinationRef = useRef(destination);
+  destinationRef.current = destination;
+  const finalApproachRef = useRef(finalApproach);
+  finalApproachRef.current = finalApproach;
   // Lido via ref pela câmera de condução (driveCameraTo) para calcular a
   // tangente da rota sem recriar o callback a cada (re)desenho da linha.
   const routeRef = useRef(route);
@@ -1005,6 +1016,53 @@ export function useMapboxMap({
       const map = mapRef.current;
       const geometry = routeRef.current?.geometry;
       const anchor = drAnchorRef.current;
+
+      // TRECHO FINAL: a rota (via) acabou; a câmera acompanha o GPS cru ao longo
+      // do tracejado (fim da rota → pino) em vez da projeção na rota (que fica
+      // travada no fim da linha). Assim o pino "desce" até o ícone fixo do
+      // carro — os dois se encontram — e só então a chegada confirma (reducer).
+      // Ramo isolado: só roda com `finalApproach`; nada do caminho normal muda.
+      const dest = destinationRef.current;
+      const pos = originRef.current;
+      if (
+        finalApproachRef.current &&
+        map &&
+        typeof map.jumpTo === 'function' &&
+        dest &&
+        pos &&
+        geometry &&
+        geometry.length >= 1 &&
+        isFollowingUserRef.current &&
+        !userPannedRef.current &&
+        containerRef.current &&
+        now - lastCameraApplyMsRef.current >= NAV_CAMERA_APPLY_MIN_MS
+      ) {
+        const end = geometry[geometry.length - 1];
+        const onLeg = projectOntoRoute(pos, [end, dest]).point;
+        const bearing = bearingBetween(end, dest);
+        lastCameraApplyMsRef.current = now;
+        lastAppliedCenterRef.current = onLeg;
+        lastAppliedBearingRef.current = bearing;
+        smoothedBearingRef.current = bearing;
+        map.jumpTo({
+          center: [onLeg.lng, onLeg.lat],
+          zoom: NAV_ZOOM,
+          pitch: NAV_PITCH,
+          bearing,
+          padding: {
+            top: containerRef.current.clientHeight * 2 * NAV_PUCK_VERTICAL_OFFSET_RATIO,
+            bottom: 0,
+            left: 0,
+            right: 0,
+          },
+        });
+        if (navVehicleIconRef?.current) {
+          navVehicleIconRef.current.style.transform = 'rotate(0deg)';
+        }
+        rafIdRef.current = requestAnimationFrame(frame);
+        return;
+      }
+
       if (
         map &&
         typeof map.jumpTo === 'function' &&

@@ -110,28 +110,34 @@ describe('navigationReducer', () => {
     expect(chegou.status).toBe('arrived');
   });
 
-  it('transiciona para arrived ao completar a rota mesmo com o GPS a algumas dezenas de metros do pino', () => {
-    // O sintoma relatado: a navegação "finaliza no meio da rua" quando o GPS
-    // não bate no ponto exato do pino. Agora, se já percorreu a rota inteira e
-    // está na região do destino, conta como chegada.
+  it('rota que termina longe do pino: NÃO confirma chegada a dezenas de metros — só ao encostar no pino', () => {
+    // Caso do Atacadão: a rota (Directions) termina na via, o pino fica ~55 m
+    // adentro. Chegar ao fim da linha azul (mesmo parado) NÃO é chegada — o
+    // trecho final guia até encostar no pino.
     const planned = navigationReducer(
       { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
       { type: 'ROUTE_PLANNED', route: sampleRoute },
     );
     const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
 
-    const chegou = navigationReducer(navigating, {
+    const noFimDaLinha = navigationReducer(navigating, {
       type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3 },
+      position: { lat: 0, lng: 3 }, // fim da linha, ~55 m do pino, parado
+      speedMetersPerSecond: 0,
     });
+    expect(noFimDaLinha.status).toBe('navigating');
+    expect(noFimDaLinha.finalApproachMeters).not.toBeNull();
 
-    expect(chegou.status).toBe('arrived');
+    const noPino = navigationReducer(noFimDaLinha, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3.00048 }, // ~2 m do pino
+      speedMetersPerSecond: 0,
+    });
+    expect(noPino.status).toBe('arrived');
+    expect(noPino.finalApproachMeters).toBeNull();
   });
 
-  it('passar do fim da linha ainda em movimento e longe do pino NÃO é chegada; parar perto do pino É', () => {
-    // Caso do Atacadão: a rota (Directions) termina na via, mas o pino fica
-    // ~55 m adentro (rampa/estacionamento). Antes o app anunciava "chegou" no
-    // fim da linha azul, com o usuário ainda a caminho.
+  it('trecho final: passar em movimento ou PARAR a dezenas de metros do pino não confirma; encostar sim', () => {
     const planned = navigationReducer(
       { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
       { type: 'ROUTE_PLANNED', route: sampleRoute },
@@ -140,21 +146,27 @@ describe('navigationReducer', () => {
 
     const passandoRapido = navigationReducer(navigating, {
       type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3 }, // fim da linha, mas ~55 m do pino
+      position: { lat: 0, lng: 3 },
       speedMetersPerSecond: 8,
     });
     expect(passandoRapido.status).toBe('navigating');
-    // Nesse trecho final o painel mostra "Continue X m até o destino".
     expect(passandoRapido.finalApproachMeters).toBeGreaterThan(40);
     expect(passandoRapido.finalApproachMeters).toBeLessThan(70);
 
-    const parouPerto = navigationReducer(passandoRapido, {
+    const parouLonge = navigationReducer(passandoRapido, {
       type: 'POSITION_UPDATED',
-      position: { lat: 0, lng: 3 },
+      position: { lat: 0, lng: 3 }, // parou no fim da linha, ~55 m do pino
       speedMetersPerSecond: 0.3,
     });
-    expect(parouPerto.status).toBe('arrived');
-    expect(parouPerto.finalApproachMeters).toBeNull();
+    expect(parouLonge.status).toBe('navigating');
+
+    const encostou = navigationReducer(parouLonge, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3.00047 }, // ~3 m do pino
+      speedMetersPerSecond: 0.3,
+    });
+    expect(encostou.status).toBe('arrived');
+    expect(encostou.finalApproachMeters).toBeNull();
   });
 
   it('finalApproachMeters é null enquanto a rota ainda não acabou', () => {
