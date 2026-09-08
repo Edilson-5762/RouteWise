@@ -13,6 +13,7 @@ const addSourceMock = vi.fn();
 const setDataMock = vi.fn();
 
 let movestartHandler: ((event: { originalEvent?: unknown }) => void) | null = null;
+let moveendHandler: ((event: { originalEvent?: unknown }) => void) | null = null;
 const markerElementBox: { current: HTMLElement | null } = { current: null };
 // Leitura via função (em vez de `markerElementBox.current` direto): o TS
 // estreita `.current` para `never` quando é lido logo após um reset síncrono
@@ -30,6 +31,9 @@ vi.mock('mapbox-gl', () => {
     on = vi.fn((event: string, handler: (event: { originalEvent?: unknown }) => void) => {
       if (event === 'movestart') {
         movestartHandler = handler;
+      }
+      if (event === 'moveend') {
+        moveendHandler = handler;
       }
     });
     off = vi.fn();
@@ -576,6 +580,66 @@ describe('useMapboxMap', () => {
     });
 
     expect(result.current.isFollowingUser).toBe(true);
+  });
+
+  it('auto-retoma o seguir 4s DEPOIS do fim do gesto (não do começo), e recentraliza a câmera', () => {
+    vi.useFakeTimers();
+    movestartHandler = null;
+    moveendHandler = null;
+    const containerRef = createRef<HTMLDivElement>();
+    Object.defineProperty(containerRef, 'current', {
+      value: document.createElement('div'),
+      writable: true,
+    });
+
+    const { result } = renderHook(() =>
+      useMapboxMap({
+        containerRef,
+        origin: { lat: -23.5505, lng: -46.6333 },
+        destination: null,
+        route: sampleRoute,
+        isNavigating: true,
+        headingDegrees: 90,
+        theme: 'light',
+        travelProfile: 'driving',
+        speedMetersPerSecond: null,
+      }),
+    );
+
+    // Começa um gesto: para de seguir.
+    act(() => {
+      movestartHandler?.({ originalEvent: { type: 'touchmove' } });
+    });
+    expect(result.current.isFollowingUser).toBe(false);
+
+    const easeToBefore = (result.current.mapRef.current?.easeTo as ReturnType<typeof vi.fn>).mock
+      .calls.length;
+
+    // Passam 4s mas o dedo ainda está na tela (nenhum `moveend`): NÃO retoma.
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+    expect(result.current.isFollowingUser).toBe(false);
+
+    // Fim do gesto → o timer passa a contar a partir daqui.
+    act(() => {
+      moveendHandler?.({ originalEvent: { type: 'touchend' } });
+    });
+    act(() => {
+      vi.advanceTimersByTime(3999);
+    });
+    expect(result.current.isFollowingUser).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(2);
+    });
+    expect(result.current.isFollowingUser).toBe(true);
+    // Recentralizou de fato (easeTo da câmera de condução), não só ligou a flag.
+    expect(
+      (result.current.mapRef.current?.easeTo as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBeGreaterThan(easeToBefore);
+
+    vi.useRealTimers();
   });
 
   it('na navegação, a linha começa na posição do usuário e segue só o trecho à frente (sem emenda diagonal)', () => {

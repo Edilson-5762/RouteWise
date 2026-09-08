@@ -197,6 +197,11 @@ export function useMapboxMap({
   const speedBadgeRef = useRef<HTMLDivElement | null>(null);
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [isFollowingUser, setIsFollowingUser] = useState(true);
+  // Incrementa a cada gesto do usuário (início E fim). O efeito de auto-retomar
+  // o "seguir" depende disto, então o timer de 4 s REINICIA a cada toque — a
+  // câmera só volta a seguir 4 s depois que o usuário PARA de mexer, não 4 s
+  // depois que começou (que fazia a moto "voltar" no meio/logo após o arraste).
+  const [gestureNonce, setGestureNonce] = useState(0);
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
   // Lido (não como dependência) só no momento em que o marcador é criado —
   // igual ao restante deste hook, o efeito abaixo intencionalmente não
@@ -298,6 +303,10 @@ export function useMapboxMap({
   const lastPaddingTopRef = useRef<number | null>(null);
   // Gesto do usuário em andamento (pan/zoom) — o laço rAF respeita na hora.
   const userPannedRef = useRef(false);
+  // Dedo AINDA na tela (entre `*start` e `*end` de um gesto): enquanto true, o
+  // auto-retomar não dispara, mesmo que o timer estoure no meio de um arraste
+  // longo.
+  const gesturingRef = useRef(false);
   // Espelhos em ref de props/estado lidos dentro do laço rAF sem recriá-lo.
   const headingDegreesRef = useRef(headingDegrees);
   headingDegreesRef.current = headingDegrees;
@@ -428,13 +437,23 @@ export function useMapboxMap({
       return;
     }
 
-    const handleUserGesture = (event: { originalEvent?: unknown }) => {
+    const handleGestureStart = (event: { originalEvent?: unknown }) => {
       if (event.originalEvent) {
         // Ref síncrono (além do estado, que só reflete no próximo render): o laço
         // rAF consulta isto no MESMO frame e para de aplicar `jumpTo` na hora,
         // sem "brigar" com o gesto do usuário por um ou dois quadros.
         userPannedRef.current = true;
+        gesturingRef.current = true;
         setIsFollowingUser(false);
+      }
+    };
+
+    const handleGestureEnd = (event: { originalEvent?: unknown }) => {
+      if (event.originalEvent) {
+        gesturingRef.current = false;
+        // Fim de gesto → (re)inicia o timer de auto-retomar. É daqui que os 4 s
+        // passam a contar, não do começo do arraste.
+        setGestureNonce((n) => n + 1);
       }
     };
 
@@ -444,10 +463,13 @@ export function useMapboxMap({
     type GestureListener = (event: { originalEvent?: unknown }) => void;
     const on = map.on.bind(map) as (type: string, listener: GestureListener) => void;
     const off = map.off.bind(map) as (type: string, listener: GestureListener) => void;
-    const gestureEvents = ['movestart', 'dragstart', 'rotatestart', 'pitchstart', 'zoomstart'];
-    gestureEvents.forEach((name) => on(name, handleUserGesture));
+    const startEvents = ['movestart', 'dragstart', 'rotatestart', 'pitchstart', 'zoomstart'];
+    const endEvents = ['moveend', 'dragend', 'rotateend', 'pitchend', 'zoomend'];
+    startEvents.forEach((name) => on(name, handleGestureStart));
+    endEvents.forEach((name) => on(name, handleGestureEnd));
     return () => {
-      gestureEvents.forEach((name) => off(name, handleUserGesture));
+      startEvents.forEach((name) => off(name, handleGestureStart));
+      endEvents.forEach((name) => off(name, handleGestureEnd));
     };
   }, [containerRef]);
 
@@ -1030,6 +1052,11 @@ export function useMapboxMap({
     },
     [headingDegrees, containerRef, isNavigating, projectVehicle, updateDriveAnchor],
   );
+  // Espelho em ref: o efeito de auto-retomar chama `driveCameraTo` de dentro de
+  // um setTimeout e não deve entrar nas deps dele (a identidade muda a cada fix
+  // de GPS, o que reiniciaria o timer sem parar).
+  const driveCameraToRef = useRef(driveCameraTo);
+  driveCameraToRef.current = driveCameraTo;
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1265,17 +1292,33 @@ export function useMapboxMap({
 
   // Durante a navegação, se um gesto do usuário desligar o "seguir" (ex.: um
   // toque sem querer com o celular na mão), a câmera volta a seguir sozinha
-  // depois de alguns segundos — igual Waze/Maps.
+  // ALGUNS SEGUNDOS DEPOIS DO ÚLTIMO GESTO — igual Waze/Maps. `gestureNonce` nas
+  // deps faz o timer reiniciar a cada toque (início ou fim de gesto): antes ele
+  // contava a partir do começo do arraste, então num arraste de 3–4 s a moto
+  // "voltava" no meio ou logo após soltar.
   useEffect(() => {
     if (!isNavigating || isFollowingUser) {
       return;
     }
     const timeoutId = window.setTimeout(() => {
+      // Dedo ainda na tela (arraste longo passou dos 4 s): não retoma agora — o
+      // `*end` do gesto vai bumpar o nonce e rearmar este timer.
+      if (gesturingRef.current) {
+        return;
+      }
       userPannedRef.current = false;
       setIsFollowingUser(true);
+      // Só ligar a flag não basta: com o veículo PARADO o laço rAF não gera
+      // movimento de câmera, então ela ficaria onde o dedo largou e o ícone
+      // fixo do veículo reapareceria descolado da linha azul. `driveCameraTo`
+      // faz o easeTo com o padding certo e recola o veículo no início da rota.
+      const map = mapRef.current;
+      if (map && originRef.current) {
+        driveCameraToRef.current(map, originRef.current);
+      }
     }, RESUME_FOLLOW_DELAY_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [isNavigating, isFollowingUser]);
+  }, [isNavigating, isFollowingUser, gestureNonce]);
 
   // Fora da navegação (planejamento), recentralizar volta a mostrar a rota
   // inteira (o mesmo enquadramento do fitBounds), não um zoom de perto no
