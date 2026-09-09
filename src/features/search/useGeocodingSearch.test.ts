@@ -328,6 +328,23 @@ describe('useGeocodingSearch', () => {
     expect(result.current.suggestions.map((s) => s.id)).toEqual(['cnes-2']);
   });
 
+  it('põe um lugar do cadastro local (não-saúde) no topo, com a coordenada exata', async () => {
+    vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([
+      { id: 'geo-y', placeName: 'Vicente Pires, DF', coordinates: { lat: -15.81, lng: -48.02 } },
+    ]);
+
+    const { result } = renderHook(() => useGeocodingSearch('atacadão dia a dia vicente pires'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(result.current.suggestions[0].id).toBe('local-atacadao-dia-a-dia-vicente-pires');
+    expect(result.current.suggestions[0].coordinates).toEqual({
+      lat: -15.813558,
+      lng: -48.016237,
+    });
+  });
+
   it('query sem match local mantém o comportamento atual (só fontes remotas)', async () => {
     vi.spyOn(dfHealthUnits, 'searchDfHealthUnits').mockReturnValue([]);
     vi.spyOn(geoapifyClient, 'searchPlaces').mockResolvedValue([

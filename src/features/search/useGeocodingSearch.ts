@@ -7,6 +7,7 @@ import {
 } from '../../services/geoapifyClient';
 import { searchPlacesMapbox } from '../../services/mapboxGeocodingClient';
 import { searchDfHealthUnits } from '../../data/dfHealthUnits';
+import { searchDfLocalPlaces } from '../../data/dfLocalPlaces';
 import { searchDeepOsm } from '../../services/overpassClient';
 import { searchPhoton } from '../../services/photonClient';
 import { normalize } from '../../utils/text';
@@ -114,6 +115,7 @@ async function search(
   onFastResults: (results: PlaceSuggestion[]) => void,
 ): Promise<PlaceSuggestion[]> {
   const localUnits = searchDfHealthUnits(query, proximity);
+  const localPlaces = searchDfLocalPlaces(query, proximity);
   const category = matchPlaceCategory(query);
 
   const tasks: Promise<PlaceSuggestion[]>[] = [
@@ -126,7 +128,11 @@ async function search(
   }
 
   const outcomes = await Promise.allSettled(tasks);
-  if (outcomes.every((outcome) => outcome.status === 'rejected') && localUnits.length === 0) {
+  if (
+    outcomes.every((outcome) => outcome.status === 'rejected') &&
+    localUnits.length === 0 &&
+    localPlaces.length === 0
+  ) {
     throw (outcomes[0] as PromiseRejectedResult).reason;
   }
 
@@ -141,10 +147,12 @@ async function search(
     (suggestion) => !seen.has(proximityKey(suggestion)),
   );
 
-  const fastList = dedupeByProximity([...localUnits, ...byText, ...byCategory]).slice(
-    0,
-    MAX_SUGGESTIONS,
-  );
+  const fastList = dedupeByProximity([
+    ...localUnits,
+    ...localPlaces,
+    ...byText,
+    ...byCategory,
+  ]).slice(0, MAX_SUGGESTIONS);
   onFastResults(fastList);
 
   // Vale a pena o segundo passe? Dispara quando o passe rápido não cobre o
