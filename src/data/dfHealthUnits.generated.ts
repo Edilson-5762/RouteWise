@@ -3817,11 +3817,11 @@ export const DF_HEALTH_UNITS: DfHealthUnit[] = [
     kind: 'UBS',
     ra: 'Guará',
     coordinates: {
-      lat: -15.8493127474,
-      lng: -47.9702580354,
+      lat: -15.84958,
+      lng: -47.970391,
     },
     searchText:
-      'ubs 05 guara guara ii guara guara 2 ubs 05 guara unidade basica de saude 05 guara posto de saude 05 guara unidade de saude 05 guara centro de saude 05 guara 05 guara ubs 5 guara unidade basica de saude 5 guara posto de saude 5 guara unidade de saude 5 guara centro de saude 5 guara 5 guara ubs v guara unidade basica de saude v guara posto de saude v guara unidade de saude v guara centro de saude v guara v guara ubs cinco guara unidade basica de saude cinco guara posto de saude cinco guara unidade de saude cinco guara centro de saude cinco guara cinco guara ubs unidade basica de saude posto de saude unidade de saude centro de saude',
+      'ubs 05 guara guara ii guara guara 2 ubs 05 guara unidade basica de saude 05 guara posto de saude 05 guara unidade de saude 05 guara centro de saude 05 guara 05 guara ubs 5 guara unidade basica de saude 5 guara posto de saude 5 guara unidade de saude 5 guara centro de saude 5 guara 5 guara ubs v guara unidade basica de saude v guara posto de saude v guara unidade de saude v guara centro de saude v guara v guara ubs cinco guara unidade basica de saude cinco guara posto de saude cinco guara unidade de saude cinco guara centro de saude cinco guara cinco guara ubs unidade basica de saude posto de saude unidade de saude centro de saude horta comunitaria do guara ii horta comunitaria guara',
   },
   {
     id: 'cnes-9307524',
