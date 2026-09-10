@@ -217,7 +217,11 @@ export function App() {
         <MapView
           origin={state.origin}
           destination={state.destination}
-          route={state.route}
+          // Ao chegar: some com a linha da rota (fica só o pino + o carro),
+          // estilo Waze — sem ela "presa" atrás do veículo. O reducer ainda
+          // guarda `state.route` (usado por outras telas), então limpamos só
+          // aqui, na entrada do mapa.
+          route={state.status === 'arrived' ? null : state.route}
           isNavigating={state.status === 'navigating'}
           currentStepIndex={state.currentStepIndex}
           routeProgressIndex={state.routeProgressIndex}

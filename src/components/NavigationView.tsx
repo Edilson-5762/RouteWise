@@ -92,7 +92,21 @@ export function NavigationView({
   }, [state.status, state.arrivalSide, voice.isMuted]);
 
   if (state.status === 'arrived') {
-    return <ArrivalScreen placeName={placeName} side={state.arrivalSide} onDone={onArrivalDone} />;
+    // Cartão ancorado no rodapé, SOBRE o mapa (a linha da rota já foi limpa por
+    // App.tsx passando `route={null}` ao MapView). A raiz é pointer-events-none
+    // para o mapa continuar arrastável acima do cartão.
+    return (
+      <div className="pointer-events-none flex h-screen flex-col justify-end">
+        <div className="pointer-events-auto">
+          <ArrivalScreen
+            placeName={placeName}
+            side={state.arrivalSide}
+            destination={state.destination}
+            onDone={onArrivalDone}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (!state.route || !currentStep) {
