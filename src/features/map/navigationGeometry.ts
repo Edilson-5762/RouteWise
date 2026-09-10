@@ -3,6 +3,7 @@ import type { CongestionLevel, Coordinates, Route } from '../../types';
 import {
   bearingBetween,
   findNearestPointIndex,
+  foldClampAheadMeters,
   haversineDistanceMeters,
   locateAlongRoute,
   polylineLengthMeters,
@@ -13,7 +14,7 @@ import {
 // Reexportado daqui por compatibilidade: a implementação canônica agora vive em
 // `utils/distance` (também usada pelo navigationReducer, que não deve depender
 // da camada de mapa).
-export { bearingBetween };
+export { bearingBetween, foldClampAheadMeters };
 
 // Trecho da rota JÁ PERCORRIDO que a linha ainda desenha, atrás do ponto
 // projetado do veículo — só o suficiente para a linha encostar no ícone fixo do

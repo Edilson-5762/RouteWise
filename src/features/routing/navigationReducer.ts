@@ -1,6 +1,7 @@
 import type { ArrivalSide, Coordinates, NavigationState, Route, TravelProfile } from '../../types';
 import {
   bearingBetween,
+  foldClampAheadMeters,
   haversineDistanceMeters,
   polylineLengthMeters,
   projectOntoRoute,
@@ -169,11 +170,19 @@ export function navigationReducer(
             PROGRESS_BAND_AHEAD_MARGIN_METERS,
         ),
       );
+      // Trava de dobra: se há um retorno/grampo logo à frente, a projeção não
+      // pode ultrapassar o vértice dele antes de o carro chegar lá — senão um
+      // fix ruidoso "pula" para a perna de volta e o carro teleporta para
+      // depois do retorno (o painel some/reencaixa alguns segundos depois).
+      const foldAheadMeters =
+        state.routeAlongMeters > 0
+          ? foldClampAheadMeters(geometry, state.routeAlongMeters)
+          : Number.POSITIVE_INFINITY;
       const projection = projectOntoRoute(action.position, geometry, {
         fromIndex: state.routeProgressIndex - PROJECTION_WINDOW_BACK_SEGMENTS,
         toIndex: state.routeProgressIndex + PROJECTION_WINDOW_AHEAD_SEGMENTS,
         aroundAlongMeters: state.routeAlongMeters > 0 ? state.routeAlongMeters : undefined,
-        maxAheadMeters: bandAheadMeters,
+        maxAheadMeters: Math.min(bandAheadMeters, foldAheadMeters),
         maxBehindMeters: PROGRESS_BAND_BEHIND_METERS,
       });
       // Segue o segmento projetado, mas só deixa RECUAR
@@ -235,8 +244,7 @@ export function navigationReducer(
       const distanceToDestination = state.destination
         ? haversineDistanceMeters(action.position, state.destination)
         : Infinity;
-      const stoppedOrUnknownSpeed =
-        (action.speedMetersPerSecond ?? 0) <= ARRIVAL_STOPPED_SPEED_MPS;
+      const stoppedOrUnknownSpeed = (action.speedMetersPerSecond ?? 0) <= ARRIVAL_STOPPED_SPEED_MPS;
       const arrived =
         distanceToDestination <= ARRIVAL_AT_PIN_METERS ||
         (distanceToDestination <= ARRIVAL_NEAR_PIN_STOPPED_METERS && stoppedOrUnknownSpeed);

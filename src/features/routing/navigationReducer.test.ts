@@ -428,4 +428,64 @@ describe('navigationReducer', () => {
     expect(reset.route).toBeNull();
     expect(reset.status).toBe('idle');
   });
+
+  it('não teletransporta o progresso para depois de um retorno quando o GPS treme na perna de volta', () => {
+    // Rota com um retorno ~60 m à frente: perna de ida para leste, tampinha,
+    // perna de volta ~12 m ao sul.
+    const uTurn: Route = {
+      geometry: [
+        { lat: 0, lng: 0 },
+        { lat: 0, lng: 0.00027 },
+        { lat: 0, lng: 0.00054 },
+        { lat: -0.00006, lng: 0.00055 },
+        { lat: -0.00011, lng: 0.00054 },
+        { lat: -0.00011, lng: 0.00027 },
+        { lat: -0.00011, lng: 0 },
+      ],
+      steps: [
+        {
+          instruction: 'Siga em frente',
+          distanceMeters: 60,
+          durationSeconds: 6,
+          maneuverLocation: { lat: 0, lng: 0 },
+          maneuverType: 'depart',
+          maneuverModifier: null,
+        },
+        {
+          instruction: 'Faça o retorno',
+          distanceMeters: 73,
+          durationSeconds: 8,
+          maneuverLocation: { lat: -0.00006, lng: 0.00055 },
+          maneuverType: 'turn',
+          maneuverModifier: 'uturn',
+        },
+      ],
+      distanceMeters: 133,
+      durationSeconds: 14,
+    };
+
+    const planned = navigationReducer(initialNavigationState, {
+      type: 'ROUTE_PLANNED',
+      route: uTurn,
+    });
+    let state = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    // Andando pela perna de ida, ainda ANTES do vértice do retorno (~44 m).
+    state = navigationReducer(state, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 0.0004 },
+      speedMetersPerSecond: 12,
+    });
+    expect(state.routeAlongMeters).toBeLessThan(55);
+
+    // Fix ruidoso caindo EM CIMA da perna de volta (poucos metros ao lado, mas
+    // dezenas de metros à frente ao longo da rota). Sem a trava de dobra o
+    // progresso saltaria para depois do retorno (> 66 m).
+    state = navigationReducer(state, {
+      type: 'POSITION_UPDATED',
+      position: { lat: -0.00011, lng: 0.0004 },
+      speedMetersPerSecond: 12,
+    });
+    expect(state.routeAlongMeters).toBeLessThan(60);
+  });
 });

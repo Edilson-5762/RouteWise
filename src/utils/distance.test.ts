@@ -10,7 +10,38 @@ import {
   forwardBearingAlong,
   travelBearingAlong,
   turnAngleAtPoint,
+  nextRouteFoldAlongMeters,
+  foldClampAheadMeters,
 } from './distance';
+
+// ~180° de reversão: perna de ida para leste (lat 0), tampinha do retorno, e
+// perna de volta para oeste ~12 m ao sul. O vértice da dobra fica a ~60 m do
+// início ao longo da geometria.
+const U_TURN_GEOMETRY = [
+  { lat: 0, lng: 0 },
+  { lat: 0, lng: 0.00027 },
+  { lat: 0, lng: 0.00054 },
+  { lat: -0.00006, lng: 0.00055 },
+  { lat: -0.00011, lng: 0.00054 },
+  { lat: -0.00011, lng: 0.00027 },
+  { lat: -0.00011, lng: 0 },
+];
+
+// Curva de ~90° (leste e depois norte) — NÃO é uma dobra.
+const NINETY_GEOMETRY = [
+  { lat: 0, lng: 0 },
+  { lat: 0, lng: 0.0003 },
+  { lat: 0, lng: 0.0006 },
+  { lat: 0.0003, lng: 0.0006 },
+  { lat: 0.0006, lng: 0.0006 },
+];
+
+const STRAIGHT_GEOMETRY = [
+  { lat: 0, lng: 0 },
+  { lat: 0, lng: 0.0003 },
+  { lat: 0, lng: 0.0006 },
+  { lat: 0, lng: 0.0009 },
+];
 
 describe('haversineDistanceMeters', () => {
   it('retorna 0 para pontos idênticos', () => {
@@ -317,5 +348,46 @@ describe('turnAngleAtPoint', () => {
   it('geometria insuficiente → null', () => {
     expect(turnAngleAtPoint([{ lat: 0, lng: 0 }], { lat: 0, lng: 0 })).toBeNull();
     expect(turnAngleAtPoint([], { lat: 0, lng: 0 })).toBeNull();
+  });
+});
+
+describe('nextRouteFoldAlongMeters', () => {
+  it('acha o vértice do retorno à frente (~60 m do início)', () => {
+    const fold = nextRouteFoldAlongMeters(U_TURN_GEOMETRY, 0);
+    expect(fold).toBeGreaterThan(40);
+    expect(fold).toBeLessThan(80);
+  });
+
+  it('via reta → sem dobra (Infinity)', () => {
+    expect(nextRouteFoldAlongMeters(STRAIGHT_GEOMETRY, 0)).toBe(Infinity);
+  });
+
+  it('curva de ~90° não conta como dobra', () => {
+    expect(nextRouteFoldAlongMeters(NINETY_GEOMETRY, 0)).toBe(Infinity);
+  });
+
+  it('ignora a dobra que já ficou para trás', () => {
+    expect(nextRouteFoldAlongMeters(U_TURN_GEOMETRY, 90)).toBe(Infinity);
+  });
+
+  it('geometria curta → Infinity', () => {
+    expect(nextRouteFoldAlongMeters([{ lat: 0, lng: 0 }], 0)).toBe(Infinity);
+  });
+});
+
+describe('foldClampAheadMeters', () => {
+  it('longe do retorno, aperta o teto para pouco antes do vértice', () => {
+    const clamp = foldClampAheadMeters(U_TURN_GEOMETRY, 0);
+    expect(Number.isFinite(clamp)).toBe(true);
+    expect(clamp).toBeLessThan(60);
+    expect(clamp).toBeGreaterThan(10);
+  });
+
+  it('já em cima do retorno, solta o teto (Infinity) para o carro seguir a perna de volta', () => {
+    expect(foldClampAheadMeters(U_TURN_GEOMETRY, 55)).toBe(Infinity);
+  });
+
+  it('sem dobra à frente → Infinity', () => {
+    expect(foldClampAheadMeters(STRAIGHT_GEOMETRY, 0)).toBe(Infinity);
   });
 });

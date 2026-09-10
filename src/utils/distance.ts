@@ -179,6 +179,84 @@ export function forwardBearingAlong(
   return travelBearingAlong(line, alongMeters, 0, sampleMeters);
 }
 
+// Corda (m) antes/depois de um vértice usada para medir se a rota REVERTE ali.
+// Longa o bastante para atravessar um retorno desenhado com 2–3 vértices na
+// geometria decimada.
+const ROUTE_FOLD_SAMPLE_METERS = 22;
+// Reversão mínima (graus) para chamar um vértice de "dobra" (retorno / grampo).
+// Uma curva fechada em "L" gira ~90°; 135° deixa margem para não confundir.
+const ROUTE_FOLD_MIN_DEGREES = 135;
+// Só interessa uma dobra dentro desta distância à frente — mais longe não
+// influencia a projeção do veículo neste tick.
+const ROUTE_FOLD_LOOKAHEAD_METERS = 130;
+// A projeção do veículo é barrada este tanto ANTES do vértice da dobra…
+const FOLD_CLAMP_MARGIN_METERS = 8;
+// …e o teto é solto de vez quando o carro chega a este tanto do vértice (aí a
+// projeção PODE seguir para a perna de volta, porque a posição real também
+// está na dobra).
+const FOLD_CLAMP_RELEASE_METERS = 12;
+// O teto nunca é apertado além disto (mantém a projeção estável mesmo com a
+// dobra bem em cima).
+const FOLD_CLAMP_FLOOR_METERS = 14;
+
+// Distância-ao-longo (m) do vértice da próxima DOBRA fechada (retorno / grampo)
+// na geometria, à frente de `fromAlongMeters`, ou `Infinity` se não houver
+// nenhuma dentro de ROUTE_FOLD_LOOKAHEAD_METERS. "Dobra" = vértice em que o
+// rumo da rota se inverte mais de ROUTE_FOLD_MIN_DEGREES (medido por cordas de
+// ROUTE_FOLD_SAMPLE_METERS antes e depois, ao longo da geometria).
+//
+// É o ponto que a projeção do veículo NÃO pode ultrapassar antes de o carro
+// chegar nele: sem essa trava, um fix de GPS ruidoso "pula" para a perna de
+// volta (a poucos metros de distância, mas dezenas de metros à frente ao longo
+// da rota) e o carro teleporta para depois do retorno. Ver `foldClampAheadMeters`.
+export function nextRouteFoldAlongMeters(geometry: Coordinates[], fromAlongMeters: number): number {
+  if (geometry.length < 3) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const cum: number[] = [0];
+  for (let i = 1; i < geometry.length; i++) {
+    cum.push(cum[i - 1] + haversineDistanceMeters(geometry[i - 1], geometry[i]));
+  }
+  const horizon = fromAlongMeters + ROUTE_FOLD_LOOKAHEAD_METERS;
+  for (let i = 1; i < geometry.length - 1; i++) {
+    if (cum[i] <= fromAlongMeters) {
+      continue;
+    }
+    if (cum[i] > horizon) {
+      break;
+    }
+    const before = locateAlongRoute(geometry, cum[i] - ROUTE_FOLD_SAMPLE_METERS).point;
+    const after = locateAlongRoute(geometry, cum[i] + ROUTE_FOLD_SAMPLE_METERS).point;
+    const vertex = geometry[i];
+    if (haversineDistanceMeters(before, vertex) < 2 || haversineDistanceMeters(vertex, after) < 2) {
+      continue;
+    }
+    const reversal = Math.abs(
+      signedBearingDelta(bearingBetween(before, vertex), bearingBetween(vertex, after)),
+    );
+    if (reversal >= ROUTE_FOLD_MIN_DEGREES) {
+      return cum[i];
+    }
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+// Teto de "olhar à frente" (m) para a projeção do veículo neste tick, dado o
+// próximo retorno/dobra na rota. `Infinity` quando não há dobra à frente — ou
+// quando o carro já está praticamente nela (aí a projeção precisa poder seguir
+// para a perna de volta). Combine com `Math.min` contra a banda por velocidade.
+export function foldClampAheadMeters(geometry: Coordinates[], currentAlongMeters: number): number {
+  const foldAlong = nextRouteFoldAlongMeters(geometry, currentAlongMeters);
+  if (!Number.isFinite(foldAlong)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const gap = foldAlong - currentAlongMeters;
+  if (gap <= FOLD_CLAMP_RELEASE_METERS) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(FOLD_CLAMP_FLOOR_METERS, gap - FOLD_CLAMP_MARGIN_METERS);
+}
+
 // Projeção de lat/lng para um plano local em metros (equirretangular) em torno
 // de `ref` — preciso o bastante para dezenas/centenas de metros e barato para
 // rodar a cada tick de GPS.
@@ -292,8 +370,5 @@ export function projectOntoRoute(
     prefixMeters += segLen;
   }
 
-  return (
-    best ??
-    bestAny ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0, point }
-  );
+  return best ?? bestAny ?? { distanceMeters: 0, segmentIndex: fromIndex, alongMeters: 0, point };
 }

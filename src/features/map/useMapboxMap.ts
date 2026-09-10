@@ -21,6 +21,7 @@ import {
   buildCongestionGeojson,
   projectVehicleOntoRoute,
   bearingBetween,
+  foldClampAheadMeters,
 } from './navigationGeometry';
 import { computeDriveStep, type DriveAnchor } from './driveCamera';
 import {
@@ -340,9 +341,17 @@ export function useMapboxMap({
     // velocidade medida com folga; sem referência ainda (início), fica livre.
     const bandCenter = drAnchorRef.current?.alongMeters ?? lastProjectionRef.current?.alongMeters;
     const bandSpeed = Math.max(drAnchorRef.current?.speedMps ?? 0, emaSpeedRef.current, 0);
+    // Trava de dobra: um retorno/grampo logo à frente barra a projeção alguns
+    // metros antes do vértice até o carro chegar lá — senão um fix ruidoso
+    // "gruda" o veículo na perna de volta (linha some, carro teleporta para
+    // depois do retorno). Ver `foldClampAheadMeters`.
+    const foldAheadMeters =
+      bandCenter != null
+        ? foldClampAheadMeters(currentRoute.geometry, bandCenter)
+        : Number.POSITIVE_INFINITY;
     const projection = projectVehicleOntoRoute(currentRoute, position, anchor, {
       around: bandCenter,
-      maxAheadMeters: Math.min(140, Math.max(25, bandSpeed * 3 + 20)),
+      maxAheadMeters: Math.min(Math.min(140, Math.max(25, bandSpeed * 3 + 20)), foldAheadMeters),
       maxBehindMeters: 20,
     });
     // Segue o segmento projetado, mas só deixa RECUAR até
