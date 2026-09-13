@@ -9,6 +9,7 @@ import { CurrentRoadPill } from './CurrentRoadPill';
 import { Speedometer } from './Speedometer';
 import { selectGuidance } from '../features/navigation/selectGuidance';
 import { useVoiceGuidance } from '../features/voice/useVoiceGuidance';
+import { speak } from '../features/voice/speech';
 import { useWakeLock } from '../features/wakelock/useWakeLock';
 import type { NavigationState } from '../types';
 
@@ -77,7 +78,7 @@ export function NavigationView({
       return;
     }
     spokeArrivalRef.current = true;
-    if (voice.isMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (voice.isMuted) {
       return;
     }
     const phrase =
@@ -86,9 +87,7 @@ export function NavigationView({
         : state.arrivalSide === 'left'
           ? 'Você chegou ao seu destino. Ele fica à sua esquerda.'
           : 'Você chegou ao seu destino.';
-    const utterance = new SpeechSynthesisUtterance(phrase);
-    utterance.lang = 'pt-BR';
-    window.speechSynthesis.speak(utterance);
+    speak(phrase);
   }, [state.status, state.arrivalSide, voice.isMuted]);
 
   if (state.status === 'arrived') {

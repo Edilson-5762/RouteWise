@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { speak } from './speech';
 
 const STORAGE_KEY = 'routewise-voice-muted';
 
@@ -19,12 +20,6 @@ function readInitialMuted(): boolean {
 
 function lowerFirst(text: string): string {
   return text.length > 0 ? text[0].toLowerCase() + text.slice(1) : text;
-}
-
-function speak(phrase: string): void {
-  const utterance = new SpeechSynthesisUtterance(phrase);
-  utterance.lang = 'pt-BR';
-  window.speechSynthesis.speak(utterance);
 }
 
 export interface UpcomingManeuver {
@@ -48,6 +43,24 @@ export function useVoiceGuidance(
     far: false,
     near: false,
   });
+  // Se já anunciou o início desta navegação — sem isso o app ficava mudo do
+  // início da rota até a primeira manobra entrar no raio de aviso (relatado em
+  // teste de rua: "em alguns lugares não fala nada até certo ponto"). Rearma
+  // quando `enabled` cai (fim/saída da navegação), para anunciar de novo na
+  // próxima. Independe de `maneuver`/distância — fala assim que a navegação liga.
+  const announcedStartRef = useRef(false);
+
+  useEffect(() => {
+    if (!options.enabled) {
+      announcedStartRef.current = false;
+      return;
+    }
+    if (announcedStartRef.current || isMuted || !isSupported) {
+      return;
+    }
+    announcedStartRef.current = true;
+    speak('Iniciando navegação por voz.');
+  }, [options.enabled, isMuted, isSupported]);
 
   useEffect(() => {
     if (
