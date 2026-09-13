@@ -22,6 +22,28 @@ function fmt(n: number | null, digits = 0): string {
   return n == null ? '—' : n.toFixed(digits);
 }
 
+// Resumo do trânsito da rota atual — a faixa vermelha/âmbar só desenha nível
+// moderate/heavy/severe (ver `CONGESTION_DRAW_LEVELS` em navigationGeometry);
+// esta linha existe para diferenciar, num teste de rua, "a Directions não
+// mandou dado de trânsito" de "mandou, mas era tudo low/unknown" de "mandou
+// moderate+ e a camada não desenhou" — sem isso não dava pra saber qual dos
+// três estava acontecendo quando o usuário reportava "a linha não apareceu".
+function summarizeCongestion(route: NavigationState['route']): string {
+  if (!route) {
+    return 'sem rota';
+  }
+  const levels = route.congestions;
+  if (!levels || levels.length === 0) {
+    return 'sem dados';
+  }
+  const counts = new Map<string, number>();
+  for (const level of levels) {
+    counts.set(level, (counts.get(level) ?? 0) + 1);
+  }
+  const parts = [...counts.entries()].map(([level, count]) => `${level} ${count}`);
+  return `${parts.join(', ')} (total ${levels.length})`;
+}
+
 export function DebugPanel({ geolocation, navState }: DebugPanelProps) {
   const {
     position,
@@ -51,6 +73,7 @@ export function DebugPanel({ geolocation, navState }: DebugPanelProps) {
     ['heading', fmt(headingDegrees)],
     ['pos', position ? `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)}` : '—'],
     ['wakeLock API', wakeLockSupported],
+    ['congestion', summarizeCongestion(navState.route)],
   ];
 
   return (
