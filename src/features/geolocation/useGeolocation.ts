@@ -4,6 +4,15 @@ import { haversineDistanceMeters } from '../../utils/distance';
 
 interface GeolocationState {
   position: Coordinates | null;
+  // A leitura CRUA mais recente, sempre atualizada — mesmo quando `position`
+  // (filtrado pelo deadband abaixo) não se move por ser "ruído". Existe porque
+  // o deadband pode congelar `position` a até MAX_POSITION_DEADBAND_METERS do
+  // ponto real quando o dispositivo desacelera até parar — o bastante para
+  // travar a detecção de chegada da navegação (que precisa de <= 8/25 m reais)
+  // num destino que na prática já foi alcançado. Quem precisa de posição
+  // estável para câmera/puck usa `position`; quem precisa saber "cheguei de
+  // verdade" usa `rawPosition`.
+  rawPosition: Coordinates | null;
   speedMetersPerSecond: number | null;
   headingDegrees: number | null;
   error: string | null;
@@ -65,6 +74,7 @@ function errorMessageForCode(code: number): string {
 export function useGeolocation(): GeolocationState & { retry: () => void } {
   const [state, setState] = useState<GeolocationState>({
     position: null,
+    rawPosition: null,
     speedMetersPerSecond: null,
     headingDegrees: null,
     error: null,
@@ -134,6 +144,9 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     setState((prev) => ({
       ...prev,
       position,
+      // Sempre a leitura desta chamada (nunca a anterior) — ao contrário de
+      // `position`, não passa pelo deadband.
+      rawPosition: reading,
       speedMetersPerSecond: result.coords.speed ?? null,
       // `heading` é NaN (não null) quando o dispositivo está parado, por
       // definição da Geolocation API — `?? null` não pega esse caso, então sem
@@ -156,6 +169,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
     setState((prev) => ({
       ...prev,
       position: null,
+      rawPosition: null,
       speedMetersPerSecond: null,
       headingDegrees: null,
       error: errorMessageForCode(error.code),
@@ -241,6 +255,7 @@ export function useGeolocation(): GeolocationState & { retry: () => void } {
       setState((prev) => ({
         ...prev,
         position: null,
+        rawPosition: null,
         speedMetersPerSecond: null,
         headingDegrees: null,
         error: 'Seu navegador não suporta geolocalização.',

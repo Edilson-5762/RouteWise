@@ -103,13 +103,27 @@ export function App() {
       dispatch({
         type: 'POSITION_UPDATED',
         position: geolocation.position,
+        // Leitura crua (sem o deadband de ruído) — ver navigationReducer: é
+        // quem decide a distância real ao destino, pra "cheguei" não ficar
+        // presa quando `position` (filtrada) congela perto do pino.
+        rawPosition: geolocation.rawPosition ?? undefined,
         // Alimenta a antecipação do painel/voz (ver navigationReducer): a
         // distância até a manobra passa a ser medida de um ponto ~1 s à frente,
         // igual ao carro do desenho — sem isso o painel ficava atrás dele.
         speedMetersPerSecond: geolocation.speedMetersPerSecond,
       });
     }
-  }, [geolocation.position, geolocation.speedMetersPerSecond, state.status]);
+    // `geolocation.rawPosition` entra na dependência (e não só `position`) de
+    // propósito: ele é um objeto NOVO a cada leitura do GPS, mesmo quando
+    // `position`/`speed` ficam parados pelo deadband perto do destino — sem
+    // isso este efeito parava de disparar exatamente quando "cheguei"
+    // precisava reavaliar a distância com um fix mais fresco.
+  }, [
+    geolocation.position,
+    geolocation.rawPosition,
+    geolocation.speedMetersPerSecond,
+    state.status,
+  ]);
 
   // Plans the route once per destination selection — immediately if origin is
   // already known, or deferred until it arrives (covers picking a destination

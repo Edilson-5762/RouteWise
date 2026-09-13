@@ -110,6 +110,47 @@ describe('navigationReducer', () => {
     expect(chegou.status).toBe('arrived');
   });
 
+  it('usa rawPosition (não a `position` filtrada/deadbanded) para decidir a chegada', () => {
+    // Cenário real: o veículo desacelera e para bem perto do pino, mas o
+    // deadband de ruído do GPS (useGeolocation) pode "congelar" `position` até
+    // ~12 m antes do ponto real — sem isso a chegada nunca reavaliava a
+    // distância de verdade e a navegação ficava presa mesmo com o usuário já
+    // parado sobre o destino (relatado em teste de rua: "parei a 5 m do pino
+    // e não chegou"). `rawPosition`, quando informado, é quem decide a
+    // distância ao pino — `position` continua guiando tudo o mais (projeção,
+    // passo atual, câmera).
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const chegou = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 }, // `position` filtrada: ainda ~55 m do pino
+      rawPosition: { lat: 0, lng: 3.00048 }, // leitura crua: ~2 m do pino
+      speedMetersPerSecond: 0,
+    });
+
+    expect(chegou.status).toBe('arrived');
+  });
+
+  it('sem rawPosition, continua usando `position` normalmente (compatível com o comportamento antigo)', () => {
+    const planned = navigationReducer(
+      { ...initialNavigationState, destination: { lat: 0, lng: 3.0005 } },
+      { type: 'ROUTE_PLANNED', route: sampleRoute },
+    );
+    const navigating = navigationReducer(planned, { type: 'START_NAVIGATION' });
+
+    const aindaNavegando = navigationReducer(navigating, {
+      type: 'POSITION_UPDATED',
+      position: { lat: 0, lng: 3 }, // ~55 m do pino, sem rawPosition
+      speedMetersPerSecond: 0,
+    });
+
+    expect(aindaNavegando.status).toBe('navigating');
+  });
+
   it('rota termina a > 25 m do pino: sem modo de aproximação, mas ainda NÃO confirma chegada longe', () => {
     // Folga fim-da-rota→pino ~55 m: acima de 25 m, então NADA de tracejado /
     // "Continue X m" (uma reta longa cruzando o quarteirão engana). Mas a

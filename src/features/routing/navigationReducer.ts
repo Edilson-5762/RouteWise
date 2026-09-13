@@ -78,7 +78,19 @@ export type NavigationAction =
   | { type: 'ROUTE_RECALCULATED'; route: Route }
   | { type: 'ROUTE_DEVIATED' }
   | { type: 'START_NAVIGATION' }
-  | { type: 'POSITION_UPDATED'; position: Coordinates; speedMetersPerSecond?: number | null }
+  | {
+      type: 'POSITION_UPDATED';
+      position: Coordinates;
+      // Leitura CRUA do GPS (ver useGeolocation), sem o filtro de ruído que
+      // `position` leva. O filtro pode "congelar" `position` a até ~12 m do
+      // ponto real quando o veículo desacelera até parar perto do destino —
+      // o bastante para a chegada nunca reavaliar a distância de verdade e a
+      // navegação ficar presa mesmo já no pino. Quando informada, é ela quem
+      // decide a distância ao destino (chegada / "Continue X m"); `position`
+      // segue guiando tudo o resto (projeção, passo atual, câmera).
+      rawPosition?: Coordinates;
+      speedMetersPerSecond?: number | null;
+    }
   | { type: 'RESET' };
 
 export const initialNavigationState: NavigationState = {
@@ -240,9 +252,13 @@ export function navigationReducer(
       // Chegada só quando o carro está DE FATO em cima do pino (ícones colados
       // na tela): <= AT_PIN em movimento, ou <= NEAR_PIN se parou ali. Não há
       // mais "chegou porque a linha azul acabou" — o trecho final guia até o
-      // pino.
+      // pino. Usa `rawPosition` (sem o deadband de ruído de useGeolocation)
+      // quando disponível: o deadband pode congelar `position` a até ~12 m do
+      // ponto real ao desacelerar — o bastante pra "cheguei" nunca reavaliar
+      // com o usuário já parado sobre o destino.
+      const arrivalPosition = action.rawPosition ?? action.position;
       const distanceToDestination = state.destination
-        ? haversineDistanceMeters(action.position, state.destination)
+        ? haversineDistanceMeters(arrivalPosition, state.destination)
         : Infinity;
       const stoppedOrUnknownSpeed = (action.speedMetersPerSecond ?? 0) <= ARRIVAL_STOPPED_SPEED_MPS;
       const arrived =
@@ -252,7 +268,7 @@ export function navigationReducer(
       if (arrived) {
         const travelBearing = state.origin ? bearingBetween(state.origin, action.position) : null;
         const destinationBearing = state.destination
-          ? bearingBetween(action.position, state.destination)
+          ? bearingBetween(arrivalPosition, state.destination)
           : null;
         let arrivalSide: ArrivalSide = 'ahead';
         if (travelBearing !== null && destinationBearing !== null) {

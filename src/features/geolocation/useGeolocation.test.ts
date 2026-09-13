@@ -144,6 +144,40 @@ describe('useGeolocation', () => {
     expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
   });
 
+  it('expõe rawPosition da leitura mais recente mesmo quando ela é filtrada como ruído', async () => {
+    // `position` (filtrado) existe para o puck/câmera não tremerem parado; mas
+    // esse filtro pode "congelar" a posição até 12 m antes do destino real (ver
+    // MAX_POSITION_DEADBAND_METERS) — o suficiente para travar a chegada da
+    // navegação (distância <= 8/25 m nunca reavaliada com um fix mais fresco,
+    // relatado em teste de rua: "parei a 5 m do pino e não chegou"). `rawPosition`
+    // existe para quem precisa da leitura crua mesmo sem "movimento real".
+    let successCallback: PositionCallback | null = null;
+    (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
+      (success: PositionCallback) => {
+        successCallback = success;
+        success({
+          coords: { latitude: -23.5505, longitude: -46.6333, accuracy: 15 },
+        } as GeolocationPosition);
+        return 1;
+      },
+    );
+
+    const { result } = renderHook(() => useGeolocation());
+    await waitFor(() => {
+      expect(result.current.rawPosition).toEqual({ lat: -23.5505, lng: -46.6333 });
+    });
+
+    act(() => {
+      // ~11m ao norte: dentro da precisão de 15m — vira ruído para `position`.
+      successCallback?.({
+        coords: { latitude: -23.5506, longitude: -46.6333, accuracy: 15 },
+      } as GeolocationPosition);
+    });
+
+    expect(result.current.position).toEqual({ lat: -23.5505, lng: -46.6333 });
+    expect(result.current.rawPosition).toEqual({ lat: -23.5506, lng: -46.6333 });
+  });
+
   it('nunca cai para o modo impreciso — só pede watchPosition em alta precisão', async () => {
     (navigator.geolocation.watchPosition as ReturnType<typeof vi.fn>).mockImplementation(
       (_success: PositionCallback, error: PositionErrorCallback) => {
