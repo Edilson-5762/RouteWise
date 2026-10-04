@@ -91,11 +91,14 @@ export function NavigationView({
   }, [state.status, state.arrivalSide, voice.isMuted]);
 
   if (state.status === 'arrived') {
-    // Cartão ancorado no rodapé, SOBRE o mapa (a linha da rota já foi limpa por
-    // App.tsx passando `route={null}` ao MapView). A raiz é pointer-events-none
-    // para o mapa continuar arrastável acima do cartão.
+    // Cartão ancorado no rodapé, SOBRE o mapa. Precisa ser `fixed`: o mapa é uma
+    // camada fixed z-0 (App.tsx) e um bloco no fluxo fica pintado atrás dela.
+    // A raiz é pointer-events-none para o mapa continuar arrastável acima do cartão.
     return (
-      <div className="pointer-events-none flex h-screen flex-col justify-end">
+      <div
+        data-testid="arrival-overlay"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-10"
+      >
         <div className="pointer-events-auto">
           <ArrivalScreen
             placeName={placeName}

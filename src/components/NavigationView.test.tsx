@@ -70,6 +70,29 @@ describe('NavigationView', () => {
     expect(screen.getByText('Você chegou ao seu destino')).toBeInTheDocument();
   });
 
+  it('o cartão de chegada fica posicionado sobre o mapa (fixed), não no fluxo', () => {
+    // O mapa é uma camada `fixed z-0` (App.tsx). Um wrapper não posicionado
+    // ficava PINTADO ATRÁS dela — cartão de chegada invisível em produção
+    // (relatado em teste de rua com status `arrived` no painel de diagnóstico).
+    render(
+      <NavigationView
+        state={{ ...navigatingState, status: 'arrived' }}
+        placeName="Av. Paulista, São Paulo"
+        speedMetersPerSecond={null}
+        isRecalculating={false}
+        routeError={null}
+        onRetryRecalc={vi.fn()}
+        onExit={vi.fn()}
+        onArrivalDone={vi.fn()}
+        onExitApp={vi.fn()}
+      />,
+    );
+
+    const overlay = screen.getByTestId('arrival-overlay');
+    expect(overlay.className).toMatch(/\bfixed\b/);
+    expect(overlay.className).toMatch(/\bz-10\b/);
+  });
+
   it('mostra aviso não bloqueante quando está recalculando a rota', () => {
     render(
       <NavigationView
